@@ -237,3 +237,97 @@ test('a moment plays its clip: start to stop, or to the end of the song', () => 
   s.stop = 25;
   assert.deepEqual([M.clipOf(s).stop, M.clipOf(s).length], [25, 15]);
 });
+
+/* ---------------------------------------------------------------- Phase 3: Drive merge */
+
+test('first download takes the team from Drive as it is', () => {
+  const remote = JSON.parse(JSON.stringify(teamWith(3)));
+  const t = M.mergeTeam(null, remote);
+  assert.equal(t.players.length, 3);
+  assert.equal(t.lineups[0].order.length, 3);
+});
+
+test('an update replaces the roster but keeps a lineup this device changed since the last sync', () => {
+  const remote = teamWith(3);
+  const local = JSON.parse(JSON.stringify(remote));
+  const lastSync = Date.now();
+  // this device reorders its lineup after syncing
+  local.lineups[0].order.reverse(); local.lineups[0].updated = lastSync + 1000;
+  // the organizer adds a player and a new lineup, and changes a name
+  const r = JSON.parse(JSON.stringify(remote));
+  const added = M.addPlayer(r, { first: 'New', number: '99' });
+  r.players[0].first = 'Renamed';
+  r.lineups.push(M.newLineup('Tournament', r.lineups[0].order));
+  const out = M.mergeTeam(local, r, { lastSync });
+  assert.equal(out.players.length, 4);
+  assert.equal(out.players[0].first, 'Renamed');
+  assert.deepEqual(out.lineups[0].order.slice(0, 3), [...remote.lineups[0].order].reverse(), 'local order kept');
+  assert.equal(out.lineups[0].order.at(-1), added.id, 'new player joins the kept lineup');
+  assert.ok(out.lineups.some(l => l.name === 'Tournament'), 'Drive’s new lineup arrives');
+});
+
+test('a lineup this device did not touch takes Drive’s version', () => {
+  const remote = teamWith(3);
+  const local = JSON.parse(JSON.stringify(remote));
+  local.lineups[0].updated = 1;
+  const r = JSON.parse(JSON.stringify(remote));
+  r.lineups[0].order.reverse();
+  const out = M.mergeTeam(local, r, { lastSync: 10 });
+  assert.deepEqual(out.lineups[0].order, r.lineups[0].order);
+});
+
+test('keepSetup keeps this device’s roster and still brings new lineups', () => {
+  const remote = teamWith(2);
+  const local = JSON.parse(JSON.stringify(remote));
+  local.players[0].first = 'Mine';
+  const r = JSON.parse(JSON.stringify(remote));
+  r.players[0].first = 'Theirs';
+  r.lineups.push(M.newLineup('Extra', r.lineups[0].order));
+  const out = M.mergeTeam(local, r, { lastSync: Date.now(), keepSetup: true });
+  assert.equal(out.players[0].first, 'Mine');
+  assert.equal(out.lineups.length, 2);
+});
+
+test('setup fingerprint ignores lineups and changes with the roster', () => {
+  const t = teamWith(2);
+  const a = M.setupPrint(t);
+  M.benchPlayer(t.lineups[0], t.lineups[0].order[0]);
+  assert.equal(M.setupPrint(t), a);
+  t.players[0].first = 'Changed';
+  assert.notEqual(M.setupPrint(t), a);
+});
+
+test('library: Drive wins for the same song, this device’s own songs stay', () => {
+  const local = libWith(2); local.songs[0].start = 5;
+  const remote = libWith(1); remote.songs[0].start = 42;
+  const out = M.mergeLibrary(local, remote);
+  assert.equal(out.songs.length, 2);
+  assert.equal(M.findSong(out, 's1').start, 42);
+  assert.equal(M.findSong(M.mergeLibrary(local, remote, { keepLocal: true }), 's1').start, 5);
+});
+
+test('publishing one team keeps the other teams’ songs in Drive’s library', () => {
+  const remote = libWith(3); // s1..s3, used by other teams
+  const local = libWith(2); local.songs[1].start = 9; local.songs.push({ ...M.songFromFile('Songs/New.mp3'), id: 'new' });
+  const out = M.libraryForPublish(remote, local, new Set(['s2', 'new']));
+  assert.deepEqual(out.songs.map(s => s.id).sort(), ['new', 's1', 's2', 's3']);
+  assert.equal(M.findSong(out, 's2').start, 9);
+});
+
+test('songs a team uses, and where files live in Drive', () => {
+  const t = teamWith(1);
+  t.players[0].songId = 'a';
+  t.moments[0].songIds = ['b', 'a'];
+  assert.deepEqual([...M.teamSongIds(t)].sort(), ['a', 'b']);
+  assert.equal(M.drivePathFor('Songs/X - Y.mp3', 'U13 Bees'), 'Shared Songs/X - Y.mp3');
+  assert.equal(M.drivePathFor('Announcements/p_1-ava.mp3', 'U13 Bees'), 'U13 Bees/Announcements/p_1-ava.mp3');
+});
+
+test('a lineup changed here before the last sync survives the next update if Drive’s is older', () => {
+  const remote = teamWith(3);
+  remote.lineups[0].updated = 100;
+  const local = JSON.parse(JSON.stringify(remote));
+  M.benchPlayer(local.lineups[0], local.lineups[0].order[0]); local.lineups[0].updated = 200;
+  const out = M.mergeTeam(local, JSON.parse(JSON.stringify(remote)), { lastSync: 300 });
+  assert.equal(out.lineups[0].bench.length, 1);
+});

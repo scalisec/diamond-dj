@@ -369,6 +369,82 @@
     return obj;
   }
 
+  /* ------------------------------------------------------------ Google Drive: what syncs and how it merges */
+
+  /* The part of a team the organizer publishes and an update replaces: name, roster, moments.
+     Lineups are separate: they belong to whoever is running the game. */
+  function setupOf(team) {
+    return { name: team.name, short: team.short, players: team.players, moments: team.moments };
+  }
+  // a short fingerprint, to tell whether a device changed the setup since it last synced
+  function fingerprint(obj) {
+    const s = JSON.stringify(obj);
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(36) + ':' + s.length;
+  }
+  const setupPrint = team => fingerprint(setupOf(team));
+  function libraryPrint(library, songIds) {
+    const ids = [...songIds].sort();
+    return fingerprint(ids.map(id => findSong(library, id)).filter(Boolean));
+  }
+
+  /* Every song a team uses: walk-ups and moments. */
+  function teamSongIds(team) {
+    const ids = new Set();
+    for (const p of team.players) if (p.songId) ids.add(p.songId);
+    for (const m of team.moments) for (const id of m.songIds) ids.add(id);
+    return ids;
+  }
+
+  /* An update from Drive meets this device's copy of the team.
+     - keepSetup false: roster, moments and name come from Drive; true: this device's stay.
+     - lineups: Drive's lineups are added; a lineup this device changed since `lastSync` is kept as
+       it is; otherwise Drive's version replaces it only if Drive's is newer; this device's own
+       lineups stay.
+     The result's lineups are made consistent with its roster. */
+  function mergeTeam(local, remote, { lastSync = 0, keepSetup = false } = {}) {
+    if (!local) return checkTeam(JSON.parse(JSON.stringify(remote)));
+    const base = keepSetup ? local : remote;
+    const out = JSON.parse(JSON.stringify({ ...base, id: local.id || remote.id }));
+    const lineups = local.lineups.map(l => ({ ...l, order: [...l.order], bench: [...l.bench] }));
+    for (const r of remote.lineups || []) {
+      const i = lineups.findIndex(l => l.id === r.id);
+      if (i < 0) lineups.push({ ...r, order: [...r.order], bench: [...r.bench] });
+      // kept if this device changed it since the last sync; otherwise Drive's wins only if it's newer
+      else if (!(lineups[i].updated > lastSync) && r.updated > lineups[i].updated) lineups[i] = { ...r, order: [...r.order], bench: [...r.bench] };
+    }
+    out.lineups = lineups;
+    return checkTeam(out);
+  }
+
+  /* Songs from Drive's library replace this device's copy of the same song (unless keepLocal);
+     songs only this device has stay. */
+  function mergeLibrary(local, remote, { keepLocal = false } = {}) {
+    const out = newLibrary();
+    const byId = new Map();
+    for (const s of remote.songs || []) byId.set(s.id, s);
+    for (const s of local.songs || []) if (!byId.has(s.id) || keepLocal) byId.set(s.id, s);
+    out.songs = [...byId.values()].map(s => ({ ...s }));
+    return checkLibrary(out);
+  }
+
+  /* Publishing one team: Drive's library keeps every other team's songs, and gets this team's. */
+  function libraryForPublish(remote, local, songIds) {
+    const out = newLibrary();
+    const byId = new Map((remote && remote.songs || []).map(s => [s.id, s]));
+    for (const id of songIds) { const s = findSong(local, id); if (s) byId.set(id, s); }
+    out.songs = [...byId.values()];
+    return out;
+  }
+
+  /* Where a file on this device lives in the Drive folder, and back. */
+  function drivePathFor(localPath, teamFolderName) {
+    if (localPath.startsWith('Songs/')) return 'Shared Songs/' + localPath.slice(6);
+    if (localPath.startsWith('Announcements/')) return `${teamFolderName}/${localPath}`;
+    return null;
+  }
+
   const api = {
     uid, newTeam, newPlayer, playerName, byNumber, playerStatus, addPlayer, removePlayer,
     newLineup, syncLineups, findLineup, duplicateLineup, addLineup, removeLineup,
@@ -377,6 +453,7 @@
     newLibrary, findSong, songFromFile, songLabel, songsUsing,
     walkupPlan, checkTeam, checkLibrary,
     COLORS, newMoment, defaultMoments, findMoment, removeSongEverywhere, momentsWithSong, pickSong, notePlayed, clipOf,
+    setupOf, fingerprint, setupPrint, libraryPrint, teamSongIds, mergeTeam, mergeLibrary, libraryForPublish, drivePathFor,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Model = api;

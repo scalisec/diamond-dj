@@ -28,10 +28,13 @@ const DEFAULTS = {
   locked: false,       // Lock: hides setup screens and settings on this device
 };
 
-let team = null;        // Model team
-let library = null;     // Model library
-// game state on this device: lineup in use, who's up next, songs played this game, where each moment got to
-let game = { lineupId: null, upNext: null, lastPlayed: null, played: [], cursors: {} };
+let teams = {};          // every team on this device, by id
+let team = null;         // the team in use (one of `teams`)
+let library = null;      // Model library: songs shared by every team on this device
+// game state per team on this device: lineup in use, who's up next, songs played this game, where each moment got to
+const newGameState = () => ({ lineupId: null, upNext: null, lastPlayed: null, played: [], cursors: {} });
+let games = {};
+let game = newGameState();
 let settings = { ...DEFAULTS };
 const stored = new Set(); // paths of audio files on this device
 
@@ -40,10 +43,38 @@ const SETUP_VIEWS = ['roster', 'songs', 'moments'];
 
 const timers = {};
 function later(key, fn, ms = 300) { clearTimeout(timers[key]); timers[key] = setTimeout(fn, ms); }
-const saveTeam = () => later('team', () => Store.set('team', team).catch(saveFailed));
-const saveLibrary = () => later('library', () => Store.set('library', library).catch(saveFailed));
-const saveGame = () => later('game', () => Store.set('game', game).catch(saveFailed));
-const saveSettings = () => later('settings', () => Store.set('settings', settings).catch(saveFailed));
+const SAVERS = {
+  team: () => Store.set('teams', teams).then(() => Store.set('currentTeam', team.id)),
+  library: () => Store.set('library', library),
+  game: () => { games[team.id] = game; return Store.set('games', games); },
+  settings: () => Store.set('settings', settings),
+};
+const saveTeam = () => later('team', () => SAVERS.team().catch(saveFailed));
+const saveLibrary = () => later('library', () => SAVERS.library().catch(saveFailed));
+const saveGame = () => later('game', () => SAVERS.game().catch(saveFailed));
+const saveSettings = () => later('settings', () => SAVERS.settings().catch(saveFailed));
+// save anything waiting, now (before leaving the page for Google's sign-in)
+async function saveNow() {
+  for (const k of Object.keys(SAVERS)) clearTimeout(timers[k]);
+  await Promise.all(Object.values(SAVERS).map(f => f().catch(() => {})));
+}
+
+/* Switch the device to another team: its roster, lineups, moments and game state. */
+function useTeam(id) {
+  if (!teams[id]) return;
+  if (team) games[team.id] = game;
+  team = teams[id];
+  game = { ...newGameState(), ...(games[id] || {}) };
+  if (!Model.findLineup(team, game.lineupId)) game.lineupId = team.lineups[0].id;
+  ui.playerId = ui.momentId = ui.lineupId = null;
+  saveTeam(); saveGame();
+}
+function addTeam(t, { use = true } = {}) {
+  teams[t.id] = t;
+  if (use) useTeam(t.id);
+  saveTeam();
+  return t;
+}
 function saveFailed(e) { console.error(e); toast('Couldn’t save on this device. Check the storage space.'); }
 
 function lineup() {
@@ -96,6 +127,7 @@ function armed(btn, label = 'Tap again to confirm') {
 const dlg = $('#dlg');
 let dlgOnClose = null;
 function openDialog(title, html, onClose = null) {
+  $('#dlgBody').onclick = null; // a dialog's own click handler (Teams) never outlives it
   $('#dlgTitle').textContent = title;
   $('#dlgBody').innerHTML = html;
   dlgOnClose = onClose;
@@ -128,7 +160,7 @@ async function storeFile(path, blob) {
 }
 async function dropFileIfUnused(path) {
   if (!path) return;
-  const used = library.songs.some(s => s.path === path) || team.players.some(p => p.intro && p.intro.path === path);
+  const used = library.songs.some(s => s.path === path) || Object.values(teams).some(t => t.players.some(p => p.intro && p.intro.path === path));
   if (used) return;
   await Store.audio.remove(path).catch(() => {});
   stored.delete(path);
@@ -611,8 +643,12 @@ function openSettings() {
   const row = (label, key, min, max, step, fmt) => `<div class="setting"><span>${label}</span>
     <input type="range" data-set="${key}" min="${min}" max="${max}" step="${step}" value="${settings[key]}" aria-label="${esc(label)}"><output data-out="${key}">${fmt(settings[key])}</output></div>`;
   openDialog('Settings', `
+    <h3>Google Drive</h3>
+    <div id="driveBox" class="stack"></div>
     <h3>Team</h3>
-    <label class="field">Team name<input type="text" id="setTeamName" value="${esc(team.name)}" autocomplete="off"></label>
+    <div class="grid2"><label class="field">Team name<input type="text" id="setTeamName" value="${esc(team.name)}" autocomplete="off"></label>
+      <label class="field">Short name (top of the screen)<input type="text" id="setTeamShort" value="${esc(team.short || '')}" autocomplete="off" maxlength="16"></label></div>
+    <p class="hint">Switch teams, or add one, with the team button at the top left.</p>
     <h3>Game</h3>
     <div class="row"><button class="btn" id="setNewGame">New game (start from batter 1)</button></div>
     <h3>Playback</h3>
@@ -632,7 +668,9 @@ function openSettings() {
     <p class="hint" id="setStorage">Checking storage…</p>
     <p class="hint">Diamond DJ ${esc(window.APP_VERSION || '')}</p>`, () => render());
 
-  $('#setTeamName').oninput = e => { team.name = e.target.value; team.short = e.target.value; saveTeam(); $('#teamName').textContent = team.name || 'Diamond DJ'; };
+  paintDrive();
+  $('#setTeamName').oninput = e => { team.name = e.target.value; saveTeam(); };
+  $('#setTeamShort').oninput = e => { team.short = e.target.value; saveTeam(); $('#teamName').textContent = team.short || team.name || 'Diamond DJ'; };
   $('#setNewGame').onclick = e => { if (!armed(e.currentTarget, 'Tap again: start from batter 1')) return; newGame(); };
   for (const r of document.querySelectorAll('[data-set]')) {
     r.oninput = () => {
@@ -682,10 +720,10 @@ async function openBackup(file) {
   try {
     const obj = JSON.parse(await file.text());
     const t = Model.checkTeam(obj.team || obj);
-    const lib = obj.library ? Model.checkLibrary(obj.library) : library;
-    team = t; library = lib;
-    game.lineupId = team.lineups[0].id; game.upNext = null;
-    saveTeam(); saveLibrary(); saveGame();
+    if (obj.library) library = Model.mergeLibrary(library, Model.checkLibrary(obj.library));
+    delete games[t.id];
+    addTeam(t);
+    saveLibrary();
     closeDialog();
     toast(`Opened ${team.name}. Songs whose files aren’t on this device are marked.`);
   } catch (e) {
@@ -705,11 +743,13 @@ async function loadDemo() {
       if (!r.ok) throw new Error('offline');
       await storeFile(f.path, await r.blob());
     }
-    team = Model.checkTeam(demo.team);
-    library.songs = library.songs.filter(s => !demo.library.songs.some(d => d.id === s.id)).concat(Model.checkLibrary(demo.library).songs);
-    game = { lineupId: team.lineups[0].id, upNext: null, lastPlayed: null, played: [], cursors: {} };
-    ui.playerId = null; ui.songId = null; ui.lineupId = null;
-    saveTeam(); saveLibrary(); saveGame();
+    library = Model.mergeLibrary(library, Model.checkLibrary(demo.library));
+    delete games[demo.team.id];
+    // the demo is a team of its own; an untouched empty team made at first start makes way for it
+    if (!team.players.length && Object.keys(teams).length === 1 && !Drive.state.teams[team.id]) delete teams[team.id];
+    addTeam(Model.checkTeam(demo.team));
+    ui.songId = null;
+    saveLibrary();
     closeDialog();
     toast('Demo team loaded. Tap Play walkup to try it.');
   } catch (e) {
@@ -944,6 +984,212 @@ function setLocked(on) {
   btn.addEventListener('contextmenu', e => e.preventDefault());
 })();
 
+/* ==================================================================== 12. TEAMS AND GOOGLE DRIVE (screens) */
+
+function openTeams() {
+  const list = Object.values(teams).sort((a, b) => a.name.localeCompare(b.name)).map(t => {
+    const st = Drive.state.teams[t.id];
+    return `<div class="row team-row">
+      <button class="item ${t.id === team.id ? 'sel' : ''}" data-team="${esc(t.id)}" style="flex:1">
+        <span class="grow"><span class="name">${esc(t.name)}</span>
+        <span class="sub">${t.players.length} player${t.players.length === 1 ? '' : 's'}${st ? ' · from Google Drive' : ''}</span></span>
+        ${t.id === team.id ? '<span class="pill">In use</span>' : ''}</button>
+      ${t.id !== team.id && !settings.locked ? `<button class="btn small danger" data-remove-team="${esc(t.id)}">Remove</button>` : ''}</div>`;
+  }).join('');
+  openDialog('Teams on this device', `
+    <p class="hint">Tap a team to use it. Each team keeps its own roster, lineups, moments and game.</p>
+    <div class="list">${list}</div>
+    ${settings.locked ? '' : `<div class="row"><button class="btn outline" id="teamNew">+ New team</button>
+      <button class="btn" id="teamDrive">Get teams from Google Drive</button></div>
+      <p class="hint">Removing a team takes it off this device only. Songs other teams use stay.</p>`}`, () => render());
+  $('#dlgBody').onclick = async e => {
+    const pick = e.target.closest('[data-team]');
+    if (pick) { Sound.fadeAll(); useTeam(pick.dataset.team); closeDialog(); toast(`Now using ${team.name}.`); return; }
+    const rm = e.target.closest('[data-remove-team]');
+    if (rm) {
+      if (!armed(rm, 'Tap again to remove')) return;
+      const t = teams[rm.dataset.removeTeam];
+      delete teams[t.id]; delete games[t.id]; delete Drive.state.teams[t.id];
+      Drive.save(); saveTeam(); saveGame();
+      for (const p of t.players) if (p.intro) await dropFileIfUnused(p.intro.path);
+      toast(`${t.name} removed from this device.`);
+      return openTeams();
+    }
+    if (e.target.id === 'teamNew') {
+      const name = await askText('New team', 'Team name', '', 'Create');
+      if (name) { addTeam(Model.newTeam(name, name)); toast(`${name} created. Add players in Roster.`); }
+      return render();
+    }
+    if (e.target.id === 'teamDrive') { closeDialog(); openSettings(); return startCheck(); }
+  };
+}
+
+const dui = { phase: 'idle', remote: null, plan: null, chosen: [], keep: {}, stop: false, note: '', pub: null };
+
+function paintDrive() {
+  const box = $('#driveBox');
+  if (!box) return;
+  const when = Drive.state.lastCheck ? new Date(Drive.state.lastCheck).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const conn = `<details class="howto"><summary>Drive connection (organizer)</summary>
+      <label class="field">Google Drive folder link<input type="url" id="drvFolder" value="${esc(settings.driveFolder || '')}" placeholder="Leave blank to use the Diamond DJ folder" autocomplete="off" spellcheck="false"></label>
+      <label class="field">Google sign-in client ID<input type="text" id="drvClient" value="${esc(settings.driveClient || '')}" placeholder="${DRIVE.clientId ? 'Leave blank to use the built-in one' : 'Paste the client ID from Google Cloud'}" autocomplete="off" spellcheck="false"></label>
+      <p class="hint">These change this device only. Share the folder with each volunteer’s Google account: Viewer to download, Editor to publish.</p></details>`;
+  if (dui.phase === 'busy') {
+    box.innerHTML = `<p class="hint" id="drvSay">${esc(dui.note)}</p><div class="bar"><i id="drvMeter" style="width:0%"></i></div>
+      ${dui.canStop ? '<div class="row"><button class="btn" id="drvStop">Stop</button></div>' : ''}`;
+    if (dui.canStop) $('#drvStop').onclick = () => { dui.stop = true; $('#drvSay').textContent = 'Stopping after the files in progress…'; };
+    return;
+  }
+  if (dui.phase === 'plan') {
+    const p = dui.plan;
+    const rows = dui.remote.teams.map(r => {
+      const local = teams[r.data.id], st = Drive.state.teams[r.data.id];
+      const status = !local ? 'Not on this device' : st && st.modifiedTime === r.file.modifiedTime ? 'On this device · up to date' : 'On this device · changes in Drive';
+      return `<label class="check"><input type="checkbox" data-pick-team="${esc(r.data.id)}" ${dui.chosen.includes(r.data.id) ? 'checked' : ''}>
+        <span>${esc(r.data.name)}<br><small class="hint">${status}</small></span></label>`;
+    }).join('') || '<p class="hint">There are no teams in the Drive folder yet. The organizer publishes one from their device.</p>';
+    const keeps = p.teams.filter(t => t.localEdits).map(t => `<div class="warn">
+        <b>${esc(t.name)} was changed on this device</b> since it last came from Drive. Updating replaces its roster and moments with Drive’s. Lineups changed here are always kept.
+        <label class="check"><input type="checkbox" data-keep="${esc(t.id)}" ${dui.keep[t.id] ? 'checked' : ''}>Keep this device’s roster and moments for ${esc(t.name)}</label></div>`).join('');
+    const summary = !dui.chosen.length ? 'Pick at least one team.'
+      : p.items.length ? `${p.items.length} song${p.items.length === 1 ? '' : 's'} and announcement${p.items.length === 1 ? '' : 's'} to download (${mb(p.bytes)}).`
+      : 'All the songs are already on this device.';
+    box.innerHTML = `<b>Teams in Google Drive</b>${rows}${keeps}
+      <p>${summary}${p.missing.length ? ` <span class="hint">${p.missing.length} file${p.missing.length === 1 ? ' is' : 's are'} missing from Drive and will show as not on this device.</span>` : ''}</p>
+      ${p.bytes > 300e6 ? '<p class="hint">That’s a big download: use good wifi and keep the app open until it finishes.</p>' : ''}
+      <div class="row"><button class="btn primary" id="drvGo" ${dui.chosen.length ? '' : 'disabled'}>${p.items.length ? 'Download now' : 'Update'}</button><button class="btn" id="drvCancel">Cancel</button></div>`;
+    for (const c of box.querySelectorAll('[data-pick-team]')) c.onchange = () => {
+      dui.chosen = [...box.querySelectorAll('[data-pick-team]:checked')].map(x => x.dataset.pickTeam);
+      dui.plan = Drive.plan(dui.remote, dui.chosen);
+      paintDrive();
+    };
+    for (const c of box.querySelectorAll('[data-keep]')) c.onchange = () => { dui.keep[c.dataset.keep] = c.checked; };
+    $('#drvGo').onclick = runDownload;
+    $('#drvCancel').onclick = () => { dui.phase = 'idle'; paintDrive(); };
+    return;
+  }
+  if (dui.phase === 'publish') {
+    const p = dui.pub;
+    const songs = p.uploads.filter(u => u.kind === 'song').length, clips = p.uploads.filter(u => u.kind === 'clip').length;
+    box.innerHTML = `<b>Publish ${esc(team.name)} to Google Drive</b>
+      <p>Sends the roster, moments and ${team.lineups.length} lineup${team.lineups.length === 1 ? '' : 's'}${songs || clips ? `, plus ${[songs && `${songs} song${songs === 1 ? '' : 's'}`, clips && `${clips} announcement${clips === 1 ? '' : 's'}`].filter(Boolean).join(' and ')} Drive doesn’t have yet (${mb(p.bytes)})` : ''}.
+      ${p.firstTime ? `A new folder, <b>${esc(p.folderName)}</b>, is made for the team.` : ''} Nothing in Drive is deleted, and Drive keeps the earlier team file in its version history.</p>
+      ${p.notOnDevice.length ? `<p class="hint">${p.notOnDevice.length} file${p.notOnDevice.length === 1 ? ' isn’t' : 's aren’t'} on this device, so ${p.notOnDevice.length === 1 ? 'it' : 'they'} can’t be sent.</p>` : ''}
+      <p class="hint">Volunteers get the changes next time they tap Check for updates. Their own lineup changes stay.</p>
+      <div class="row"><button class="btn navy" id="pubGo">Publish now</button><button class="btn" id="pubCancel">Cancel</button></div>`;
+    $('#pubGo').onclick = runPublish;
+    $('#pubCancel').onclick = () => { dui.phase = 'idle'; paintDrive(); };
+    return;
+  }
+  // idle
+  if (!Auth.enabled()) {
+    box.innerHTML = `<p class="hint">Google sign-in isn’t set up on this copy yet. Once the organizer adds the sign-in client ID, this is where you get the team’s newest roster, lineups, moments and songs.</p>${conn}`;
+  } else if (!Auth.canRedirect()) {
+    box.innerHTML = `<p class="hint">Open Diamond DJ from its web address (or the home-screen icon) to use Google Drive.</p>${conn}`;
+  } else {
+    const edits = Drive.localEdits(team);
+    box.innerHTML = `<p class="hint">Gets the newest roster, lineups, moments and songs from the team’s Google Drive folder and keeps them on this device, so games don’t need wifi. Sign in with the Google account the organizer shared the folder with.</p>
+      <div class="row"><button class="btn primary" id="drvCheck">${Drive.state.lastCheck ? 'Check for updates' : 'Download from Google Drive'}</button>
+        <button class="btn" id="drvSwitch">Switch Google account</button></div>
+      ${dui.note ? `<p class="hint">${esc(dui.note)}</p>` : ''}
+      <p class="hint">${when ? `Last checked ${esc(when)}` : 'Not checked yet on this device'}${Drive.state.account ? ` · ${esc(Drive.state.account)}` : ''}</p>
+      ${Drive.state.editor ? `<div class="publish"><b>Organizer: publish to Drive</b>
+        <p class="hint">Sends ${esc(team.name)} from this device (roster, moments, lineups, and any songs or announcements Drive doesn’t have) so every volunteer gets it.
+        ${edits === null ? 'This team hasn’t been published yet.' : edits ? 'This device has changes that aren’t in Drive yet.' : 'Drive already has this device’s roster and moments.'}</p>
+        <div class="row"><button class="btn navy" id="drvPublish">Publish ${esc(team.name)}</button></div></div>` : ''}
+      ${conn}`;
+    $('#drvCheck').onclick = startCheck;
+    $('#drvSwitch').onclick = () => { Auth.forget(); Auth.signIn('check', { chooseAccount: true }); };
+    if ($('#drvPublish')) $('#drvPublish').onclick = startPublish;
+  }
+  const f = $('#drvFolder'), c = $('#drvClient');
+  f.onchange = () => { settings.driveFolder = f.value.trim(); saveSettings(); };
+  c.onchange = () => { settings.driveClient = c.value.trim(); saveSettings(); paintDrive(); };
+}
+
+function busy(note, canStop = false) { dui.phase = 'busy'; dui.note = note; dui.canStop = canStop; dui.stop = false; paintDrive(); }
+const say = t => { dui.note = t; const el = $('#drvSay'); if (el) el.textContent = t; };
+const meter = f => { const el = $('#drvMeter'); if (el) el.style.width = Math.min(100, f * 100).toFixed(1) + '%'; };
+function failed(e) {
+  dui.phase = 'idle';
+  dui.note = driveError(e);
+  if (e && e.message === 'drive:signin') { dui.note = 'Signing in to Google…'; paintDrive(); return Auth.signIn(dui.resume || 'check', { write: dui.resume === 'publish' }); }
+  paintDrive();
+  toast(dui.note, 6000);
+}
+
+async function startCheck() {
+  dui.resume = 'check';
+  if (!Auth.token()) { busy('Signing in to Google…'); return Auth.signIn('check'); }
+  busy('Looking at the Google Drive folder…');
+  try {
+    dui.remote = await Drive.scan(say);
+    const ids = dui.remote.teams.map(r => r.data.id);
+    dui.chosen = ids.filter(id => teams[id]);
+    if (!dui.chosen.length && ids.length === 1) dui.chosen = ids;
+    dui.keep = {};
+    dui.plan = Drive.plan(dui.remote, dui.chosen);
+    dui.phase = 'plan';
+    paintDrive();
+  } catch (e) { failed(e); }
+}
+
+async function runDownload() {
+  const { remote, plan } = dui;
+  busy('Starting the download…', true);
+  try {
+    const firstTeams = !Object.values(Drive.state.teams).length;
+    const r = await Drive.apply(remote, plan, { keepSetup: dui.keep, say, meter, stopped: () => dui.stop });
+    if (r.stopped) { dui.phase = 'idle'; dui.note = `Stopped after ${r.done} file${r.done === 1 ? '' : 's'}. Tap Check for updates to carry on.`; return paintDrive(); }
+    // first download on a device: switch to the team that came from Drive
+    if (firstTeams && plan.teams[0] && (!team.players.length || !teams[team.id])) {
+      const starter = team;
+      useTeam(plan.teams[0].id);
+      if (!starter.players.length && !Drive.state.teams[starter.id] && starter.id !== team.id) { delete teams[starter.id]; saveTeam(); }
+    } else if (teams[team.id]) useTeam(team.id); // refresh the team in use
+    dui.phase = 'idle';
+    dui.note = `Up to date. ${r.done ? `${r.done} file${r.done === 1 ? '' : 's'} downloaded.` : ''}${r.failed.length ? ` ${r.failed.length} couldn’t be downloaded; try again later.` : ''}`;
+    paintDrive();
+    toast(dui.note);
+  } catch (e) { failed(e); }
+}
+
+async function startPublish() {
+  dui.resume = 'publish';
+  if (!Auth.token() || !Auth.canWrite()) { busy('Signing in to Google…'); return Auth.signIn('publish', { write: true }); }
+  busy('Checking what Drive has…');
+  try {
+    dui.pub = await Drive.publishPlan(team, say);
+    dui.phase = 'publish';
+    paintDrive();
+  } catch (e) { failed(e); }
+}
+
+async function runPublish() {
+  busy('Publishing…');
+  try {
+    const r = await Drive.publish(dui.pub, { say, meter });
+    dui.phase = 'idle';
+    dui.note = `Published ${team.name}${r.sent ? ` and ${r.sent} file${r.sent === 1 ? '' : 's'}` : ''}. Volunteers get it with Check for updates.`;
+    paintDrive();
+    toast(dui.note);
+  } catch (e) { failed(e); }
+}
+
+/* Coming back from Google's sign-in page: carry on with what the person was doing. */
+function resumeAfterSignIn() {
+  const r = Auth.consume();
+  if (!r) return;
+  if (settings.locked && r.resume) { toast('Unlock first to use Google Drive.'); return; }
+  openSettings();
+  if (r.error) {
+    dui.note = r.error === 'access_denied' ? 'Google sign-in was cancelled.' : 'Google sign-in didn’t finish. Try again.';
+    return paintDrive();
+  }
+  if (r.resume === 'publish') startPublish();
+  else startCheck();
+}
+
 /* ==================================================================== 9. EVENTS AND STARTUP */
 
 function render() {
@@ -951,7 +1197,7 @@ function render() {
     if (b.dataset.view === ui.view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   }
-  $('#teamName').textContent = team.name || 'Diamond DJ';
+  $('#teamName').textContent = team.short || team.name || 'Diamond DJ';
   if (ui.view !== 'songs') { Sound.stopPreview(); edit.songId = null; }
   if (settings.locked && SETUP_VIEWS.includes(ui.view)) ui.view = 'game';
   ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs, moments: renderMoments })[ui.view]();
@@ -1257,6 +1503,7 @@ $('#fadeAll').addEventListener('click', () => Sound.fadeAll(settings.fadeSeconds
 $('#stopAll').addEventListener('click', () => Sound.stopAll());
 $('#master').addEventListener('input', e => { settings.masterVolume = +e.target.value; Sound.setMaster(settings.masterVolume); saveSettings(); });
 $('#settingsBtn').addEventListener('click', openSettings);
+$('#teamName').addEventListener('click', openTeams);
 let dockFrame = 0;
 Sound.onChange(() => { if (!dockFrame) dockFrame = requestAnimationFrame(() => { dockFrame = 0; renderDock(); }); });
 
@@ -1269,27 +1516,36 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 async function start() {
   Sound.setLoader(path => Store.audio.get(path));
+  let cur = null;
   try {
-    const [t, lib, g, st, paths] = await Promise.all([Store.get('team'), Store.get('library'), Store.get('game'), Store.get('settings'), Store.audio.paths()]);
-    team = t ? Model.checkTeam(t) : Model.newTeam('U13 Burlington Bees', 'U13 Bees');
-    if (t && t.version !== team.version) saveTeam(); // keep a Phase 1 team's new pre-made moments
-    library = lib ? Model.checkLibrary(lib) : Model.newLibrary();
-    if (g) game = { ...game, ...g };
+    let ts, oneTeam, lib, gs, oneGame, st, paths;
+    [ts, cur, oneTeam, lib, gs, oneGame, st, paths] = await Promise.all([Store.get('teams'), Store.get('currentTeam'),
+      Store.get('team'), Store.get('library'), Store.get('games'), Store.get('game'), Store.get('settings'), Store.audio.paths()]);
     settings = { ...DEFAULTS, ...(st || {}) };
+    library = lib ? Model.checkLibrary(lib) : Model.newLibrary();
     paths.forEach(p => stored.add(p));
+    games = gs || {};
+    for (const raw of Object.values(ts || {})) { const t = Model.checkTeam(raw); teams[t.id] = t; }
+    if (!ts && oneTeam) { // version 0.2 kept one team: carry it (and its game state) over
+      const t = Model.checkTeam(oneTeam);
+      teams[t.id] = t;
+      if (oneGame) games[t.id] = oneGame;
+    }
+    await Drive.load();
   } catch (e) {
     console.error(e);
-    team = Model.newTeam('U13 Burlington Bees', 'U13 Bees');
-    library = Model.newLibrary();
+    library = library || Model.newLibrary();
     toast('This browser can’t save on the device. Open the app from its web address or the home-screen icon.', 8000);
   }
-  if (!Model.findLineup(team, game.lineupId)) game.lineupId = team.lineups[0].id;
+  if (!Object.keys(teams).length) { const t = Model.newTeam('U13 Burlington Bees', 'U13 Bees'); teams[t.id] = t; }
+  useTeam(teams[cur] ? cur : Object.keys(teams)[0]);
   Sound.settings.fadeSeconds = settings.fadeSeconds;
   Sound.setMaster(settings.masterVolume);
   $('#master').value = settings.masterVolume;
   applyLock();
   render();
   renderDock();
+  resumeAfterSignIn(); // back from Google's sign-in page?
   keepAwake();
   Store.persist();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {

@@ -54,7 +54,18 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   background: var(--navy); color: #fff;
 }
 .logo { width: 46px; height: 54px; object-fit: contain; }
-.team-name { font-family: var(--cond); font-weight: 700; font-size: 22px; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; }
+.team-name {
+  font-family: var(--cond); font-weight: 700; font-size: 22px; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap;
+  min-height: 48px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--navy-line); background: var(--navy-2); color: #fff;
+  max-width: 34vw; overflow: hidden; text-overflow: ellipsis;
+}
+.team-name::after { content: ''; display: inline-block; margin-left: 10px; vertical-align: 3px; border: 6px solid transparent; border-top-color: var(--gold); border-bottom: 0; }
+.warn { padding: 12px 14px; border-radius: 12px; background: var(--gold-soft); border: 1px solid var(--gold); display: flex; flex-direction: column; gap: 8px; }
+.publish { padding: 14px 16px; border-radius: 14px; background: var(--gold-soft); border: 2px solid var(--gold); display: flex; flex-direction: column; gap: 8px; }
+.publish p { margin: 0; }
+.howto summary { cursor: pointer; color: var(--blue); font-weight: 600; min-height: 36px; display: flex; align-items: center; }
+.howto { display: flex; flex-direction: column; gap: 10px; }
+.team-row .item { min-height: 56px; }
 .tabs { margin-left: auto; display: flex; align-items: flex-end; gap: 12px; }
 .tab-group { display: flex; flex-direction: column; gap: 3px; }
 .group-label { padding-left: 4px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #9FB3D6; }
@@ -263,14 +274,21 @@ dialog::backdrop { background: rgba(11, 36, 71, .55); }
 @media (max-width: 900px) {
   .cols, .cols.wide-left, .game-cols { grid-template-columns: minmax(0, 1fr); }
   .pads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .team-name { display: none; }
+  .team-name { font-size: 18px; max-width: 24vw; padding: 0 10px; }
   .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .head { gap: 8px; padding-left: 10px; padding-right: 10px; }
-  .logo { width: 34px; height: 40px; }
+  .logo { display: none; }
+  .team-name { font-size: 15px; max-width: 26vw; padding: 0 8px; min-height: 44px; }
+  .team-name::after { margin-left: 6px; border-width: 5px; }
   .group-label { display: none; }
-  .group button { padding: 8px 10px; font-size: 15px; }
+  /* two rows: team, lock and settings on top; the screens underneath */
+  .head { flex-wrap: wrap; row-gap: 6px; }
+  .head .lock-btn { margin-left: auto; }
+  .tabs { order: 3; flex-basis: 100%; margin-left: 0; justify-content: space-between; align-items: center; }
+  .group button { padding: 8px 9px; font-size: 15px; }
+  .team-name { max-width: 50vw; }
   .divider { height: 36px; }
   .tabs { gap: 6px; }
   .main { padding: 12px; }
@@ -294,4 +312,8 @@ dialog::backdrop { background: rgba(11, 36, 71, .55); }
   body.locked .lock-btn span { display: inline; font-size: 13px; }
   .pad { min-height: 92px; }
   .pad-name { font-size: 23px; }
+}
+@media (max-width: 380px) {
+  .group button { padding: 8px 6px; font-size: 14px; }
+  .tabs { gap: 4px; }
 }

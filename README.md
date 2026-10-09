@@ -6,7 +6,7 @@ screen, and plays everything from the device, so no wifi is needed at the field.
 
 First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai project "Diamond DJ".
 
-## What it does (version 0.2, Phases 1 and 2)
+## What it does (version 0.3, Phases 1 to 3)
 
 - **Game**: big "Up next" card with **Play walkup** (announcement, then the song) and **Skip**;
   the batting order auto-advances and wraps. Tap any batter to play them; press and hold to make
@@ -30,9 +30,40 @@ First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai p
   1.5 s to unlock.
 - **New game** (tap twice): back to batter 1, and every song can play again.
 - Phones: the Game screen splits into Walkups, Moments and Breaks tabs.
+- **Several teams**: the team button at the top left switches teams, makes a new one or removes one
+  from the device. Each team keeps its own roster, lineups, moments and game; songs are shared.
+- **Google Drive** (Settings): volunteers sign in with Google and tap **Check for updates** to get
+  the teams they run, downloading only new or changed songs. Organizers (Editor access) get
+  **Publish to Drive**. Lineups changed on a device are never overwritten by an update.
 - Offline install (service worker), screen kept awake during play where supported.
 
-Coming next: Google Drive sync and publishing for several teams (Phase 3).
+## Google Drive
+
+```
+Diamond DJ/                      (shared person by person: Viewer = volunteer, Editor = organizer)
+├── library.diamond.json         every song's title and cut points, all teams
+├── Shared Songs/…mp3            each song once, whichever teams use it
+└── U13 Bees/                    one folder per team (made by the first Publish)
+    ├── U13-Bees.diamond.json    roster, moments, lineups
+    └── Announcements/…mp3       one clip per player
+```
+
+The folder id is `DRIVE.folder` in `js/drive.js`. Publishing never deletes anything in Drive, and
+the team file is replaced only after every song and clip uploaded.
+
+**One-time Google Cloud setup** (organizer, about 10 minutes):
+
+1. console.cloud.google.com > project list > **New project** "Diamond DJ".
+2. APIs & Services > Library > **Google Drive API** > Enable.
+3. Google Auth Platform > Get started: app name "Diamond DJ", your email, Audience **External**.
+4. Audience > **Test users**: add your Google account and each volunteer's (up to 100).
+5. Data Access > Add scopes: `.../auth/drive.readonly` and `.../auth/drive`.
+6. Clients > Create client > **Web application**. Authorized JavaScript origin
+   `https://scalisec.github.io`; redirect URI `https://scalisec.github.io/diamond-dj/`.
+7. Put the client ID in `DRIVE.clientId` in `js/drive.js` (or paste it on a device in Settings >
+   Drive connection) and publish.
+
+While the app is in Testing mode Google shows "Google hasn't verified this app": tap Continue.
 
 ## Try it
 
@@ -55,6 +86,7 @@ and `APP_VERSION` in `version.js` for every release so tablets pick up the chang
 ```
 node --test tests/model.test.js     # batting order, lineups, roster sync, walk-up plan
 python3 tests/smoke.py [outdir]     # headless Chromium walk-through of the main flows (needs Playwright)
+python3 tests/drive_test.py [outdir] # two devices against a stand-in for Google Drive (tests/fake_drive.py)
 ```
 
 ## Code
@@ -65,7 +97,8 @@ Plain HTML, CSS and JavaScript, no libraries.
 | --- | --- |
 | `js/model.js` | Data model and rules (pure, tested in Node) |
 | `js/store.js` | IndexedDB: `kv` (team, library, game state) and `audio` (files by path) |
-| `js/audio.js` | Web Audio engine: fades, ducking, the two-track walk-up, previews, waveforms |
+| `js/audio.js` | Web Audio engine: fades, ducking, the two-track walk-up, playlists, previews, waveforms |
+| `js/drive.js` | Google sign-in, Check for updates, Publish to Drive |
 | `js/app.js` | The screens, in sections marked with `====` banners |
 | `app.css` | Bees navy and gold, light background for sun |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline install |
