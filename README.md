@@ -6,7 +6,7 @@ screen, and plays everything from the device, so no wifi is needed at the field.
 
 First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai project "Diamond DJ".
 
-## What it does (version 0.3, Phases 1 to 3)
+## What it does (version 0.4)
 
 - **Game**: big "Up next" card with **Play walkup** (announcement, then the song) and **Skip**;
   the batting order auto-advances and wraps. Tap any batter to play them; press and hold to make
@@ -29,7 +29,9 @@ First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai p
 - **Lock**: hides Roster, Songs, Moments and Settings; Game and Lineup stay open. Press and hold
   1.5 s to unlock.
 - **New game** (tap twice): back to batter 1, and every song can play again.
-- Phones: the Game screen splits into Walkups, Moments and Breaks tabs.
+- Phones: the Game screen splits into Walkups, Moments and Breaks tabs and shows the next 3 batters;
+  Roster, Songs and Moments open one item at a time; dialogs open full screen; a one-row now-playing
+  bar. Tablets keep the side-by-side layouts.
 - **Several teams**: the team button at the top left switches teams, makes a new one or removes one
   from the device. Each team keeps its own roster, lineups, moments and game; songs are shared.
 - **Google Drive** (Settings): volunteers sign in with Google and tap **Check for updates** to get

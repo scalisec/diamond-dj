@@ -38,7 +38,8 @@ let game = newGameState();
 let settings = { ...DEFAULTS };
 const stored = new Set(); // paths of audio files on this device
 
-const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', momentId: null };
+const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', momentId: null,
+  phoneDetail: false, showAllBatters: false };
 const SETUP_VIEWS = ['roster', 'songs', 'moments'];
 
 const timers = {};
@@ -89,6 +90,31 @@ const song = id => (id ? Model.findSong(library, id) : null);
 
 const $ = sel => document.querySelector(sel);
 const main = $('#main');
+
+/* Phones get their own layouts (narrow screens); tablets and computers keep the side-by-side ones. */
+const phoneQuery = matchMedia('(max-width: 640px)');
+const phone = () => phoneQuery.matches;
+// on a phone, list screens (Roster, Songs, Moments) show the list, or one item full screen
+const BACK_LABEL = { roster: 'Roster', songs: 'Songs', moments: 'Moments' };
+function backBar(title) {
+  return `<div class="phone-back"><button class="back-btn" data-act="phone-back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>${BACK_LABEL[ui.view]}</button>
+    <span class="back-title">${esc(title)}</span></div>`;
+}
+const listMode = () => (phone() && !ui.phoneDetail ? 'phone-list' : 'phone-detail');
+
+/* A short menu of actions (phones use these instead of rows of buttons). */
+function openMenu(title, items) {
+  openDialog(title, `<div class="list menu">${items.map((it, i) => it ? `<button class="btn big ${it.cls || ''}" data-menu="${i}" ${it.disabled ? 'disabled' : ''}>${esc(it.label)}</button>` : '').join('')}</div>`);
+  $('#dlgBody').onclick = e => {
+    const b = e.target.closest('[data-menu]');
+    if (!b) return;
+    const it = items[+b.dataset.menu];
+    if (it.keepOpen) return it.run(b);
+    dlgOnClose = () => it.run(b); // after the menu has closed, so a follow-up dialog can open
+    closeDialog();
+  };
+}
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -223,11 +249,15 @@ function walkupsHtml() {
         </div></div>
       <div class="row"><button class="play-walkup" data-act="walkup" ${status === 'not-ready' ? 'disabled' : ''}>${PLAY_ICON}Play walkup</button>
         <button class="btn skip" data-act="skip">Skip</button></div>
-      <p class="hint">Plays the announcement, then the song, and moves to the next batter.</p>
+      ${phone() ? '' : '<p class="hint">Plays the announcement, then the song, and moves to the next batter.</p>'}
     </div>`;
   })() : `<div class="empty"><b>Nobody is in the batting order.</b><br>Add players back from the bench in Lineup.</div>`;
 
-  const rows = l.order.map((id, i) => {
+  // phones show the next three batters after the card, unless the volunteer asks for all of them
+  const compact = phone() && !ui.showAllBatters;
+  const shown = compact ? Model.comingUp(l, game.upNext).slice(0, 3) : l.order;
+  const rows = shown.map(id => {
+    const i = l.order.indexOf(id);
     const q = player(id);
     const s = song(q.songId);
     const status = Model.playerStatus(q, library);
@@ -242,9 +272,13 @@ function walkupsHtml() {
         <label class="field" style="flex-direction:row;align-items:center;gap:8px"><span>Lineup</span>
           <select id="gameLineup" style="height:40px;font-size:15px;width:auto">${lineupOptions}</select></label></div>
       ${card}
-      <div class="row"><button class="btn" data-act="edit-order">Edit order</button><button class="btn" data-act="top">Start from batter 1</button>
-        <button class="btn" data-act="new-game">New game</button></div>
+      ${phone() ? '' : `<div class="row"><button class="btn" data-act="edit-order">Edit order</button><button class="btn" data-act="top">Start from batter 1</button>
+        <button class="btn" data-act="new-game">New game</button></div>`}
       <div class="list order">${rows}</div>
+      ${phone() ? `<div class="row phone-row">
+        <button class="btn" data-act="show-batters">${ui.showAllBatters ? 'Show fewer' : `Show all ${l.order.length} batters`}</button>
+        <button class="btn" data-act="edit-order">Edit order</button></div>
+        ${ui.showAllBatters ? '<div class="row phone-row"><button class="btn" data-act="top">Start from batter 1</button><button class="btn" data-act="new-game">New game</button></div>' : ''}` : ''}
       <p class="hint">Tap a player to play them · press and hold to make them up next${l.bench.length ? `<br>On the bench: ${l.bench.map(id => esc(Model.playerName(player(id)))).join(', ')}` : ''}</p>`;
 }
 
@@ -295,6 +329,18 @@ function renderLineup() {
   const list = team.lineups.map(x => `<button class="item ${x.id === l.id ? 'sel' : ''}" data-act="lu-pick" data-id="${esc(x.id)}">
       <span class="grow"><span class="name">${esc(x.name)}</span><span class="sub">${x.order.length} batting${x.bench.length ? ` · ${x.bench.length} bench` : ''}</span></span>
       ${x.id === game.lineupId ? '<span class="pill">In use</span>' : ''}</button>`).join('');
+  if (phone()) {
+    const opts = team.lineups.map(x => `<option value="${esc(x.id)}" ${x.id === l.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    main.innerHTML = `<section class="stack">
+      <div class="row" style="flex-wrap:nowrap;align-items:flex-end">
+        <label class="field" style="flex:1">Lineup<select id="luSelect">${opts}</select></label>
+        <button class="btn square big-menu" data-act="lu-menu" aria-label="More lineup actions">⋯</button></div>
+      <div class="row">${l.id === game.lineupId ? '<span class="pill">In use on Game</span>' : '<button class="btn gold small" data-act="lu-use">Use for the game</button>'}
+        <span class="hint">Drag ⋮⋮ to reorder</span></div>
+      ${team.players.length ? orderEditor(l) : '<div class="empty">Add players in <b>Roster</b> first.</div>'}
+    </section>`;
+    return;
+  }
   main.innerHTML = `<div class="cols lineup-cols">
     <aside class="stack">
       <span class="section-title">Saved lineups</span>
@@ -361,7 +407,14 @@ document.addEventListener('pointercancel', endDrag);
 
 function openOrderDialog() {
   const l = lineup();
-  openDialog(`Edit order · ${l.name}`, `<p class="hint">Drag the handle or use the arrows. Changes save as you go.</p>${orderEditor(l)}`, () => render());
+  openDialog(`Edit order · ${l.name}`, `<p class="hint">Drag the handle<span class="wide-only"> or use the arrows</span> to move a batter. Changes save as you go.</p>${orderEditor(l)}`, () => render());
+}
+
+function deleteLineup() {
+  const wasInUse = ui.lineupId === game.lineupId;
+  Model.removeLineup(team, ui.lineupId);
+  if (wasInUse) { game.lineupId = team.lineups[0].id; game.upNext = null; saveGame(); }
+  ui.lineupId = null; saveTeam(); render();
 }
 
 /* ==================================================================== 5. ROSTER */
@@ -386,7 +439,7 @@ function renderRoster() {
     const s = song(p.songId);
     const introOk = p.intro && stored.has(p.intro.path);
     const songOk = s && stored.has(s.path);
-    editor = `<section class="panel stack" style="gap:18px">
+    editor = `<section class="panel stack" style="gap:18px">${backBar(`#${p.number} ${Model.playerName(p)}`.replace(/^# /, ''))}
       <div class="player-head"><div class="big-num" id="phNum">${esc(p.number || '–')}</div><h2 id="phName">${esc(Model.playerName(p))}</h2>
         <span class="spacer"></span><button class="btn primary big" data-act="test-walkup" ${p.intro || s ? '' : 'disabled'}>${PLAY_ICON}Test walkup</button></div>
       <div class="grid2 name-fields">
@@ -422,9 +475,10 @@ function renderRoster() {
       <div class="row"><label class="check"><input type="checkbox" data-pf="active" ${p.active ? 'checked' : ''}>Active player</label>
         <span class="hint">Inactive players stay on the roster but sit on every bench.</span>
         <span class="spacer"></span><button class="btn danger" data-act="player-remove">Remove from team</button></div>
+      <div class="phone-sticky"><button class="btn primary big" data-act="test-walkup" ${p.intro || s ? '' : 'disabled'}>${PLAY_ICON}Test walkup</button></div>
     </section>`;
   }
-  main.innerHTML = `<div class="cols roster-cols">
+  main.innerHTML = `<div class="cols roster-cols ${listMode()}">
     <aside class="stack"><span class="section-title">Roster · ${team.players.length}</span>
       <div class="list" id="rosterList">${rosterList()}</div>
       <button class="btn outline big" data-act="player-add">+ Add player</button></aside>
@@ -495,13 +549,13 @@ function renderSongs() {
   let editor = `<div class="empty"><p><b>No songs yet.</b></p><p>Tap <b>+ Add songs from this device</b> and pick MP3 files. You can pick several at once.</p></div>`;
   if (s) {
     const users = Model.songsUsing(team, s.id);
-    editor = `<section class="panel stack" style="gap:16px">
+    editor = `<section class="panel stack" style="gap:16px">${backBar(s.title)}
       <div class="grid2">
         <label class="field">Title<input type="text" data-sf="title" value="${esc(s.title)}" autocomplete="off"></label>
         <label class="field">Artist<input type="text" data-sf="artist" value="${esc(s.artist)}" autocomplete="off"></label>
       </div>
-      <div class="wave" id="wave" aria-label="Waveform. Tap to move the play point."><canvas id="waveCanvas"></canvas><div class="loading" id="waveMsg">${stored.has(s.path) ? 'Reading the song…' : 'This song’s file isn’t on this device.'}</div></div>
-      <div class="row">
+      <div class="wave" id="wave" aria-label="Waveform. Tap to move the play point."><canvas id="waveCanvas"></canvas><span class="wave-clock" id="waveClock">${mmss(edit.cursor)}</span><div class="loading" id="waveMsg">${stored.has(s.path) ? 'Reading the song…' : 'This song’s file isn’t on this device.'}</div></div>
+      <div class="row clip-btns">
         <button class="btn primary big" data-act="pv-toggle" id="pvToggle" ${stored.has(s.path) ? '' : 'disabled'}>${PLAY_ICON}<span>Play</span></button>
         <button class="btn gold big" data-act="set-start">Set start here</button>
         <button class="btn gold big" data-act="set-stop">Set stop here</button>
@@ -521,12 +575,13 @@ function renderSongs() {
       <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
         <span class="hint">${users.length ? 'Walk-up for <b>' + esc(users.map(Model.playerName).join(', ')) + '</b>' : 'Not anyone’s walk-up yet.'}</span>
         <span class="spacer"></span>
-        <label class="btn file-btn">Choose a different file<input type="file" accept="audio/*,.mp3,.m4a,.wav" data-act="song-file"></label>
-        <button class="btn danger" data-act="song-delete">Delete song</button>
+        <label class="btn file-btn wide-only">Choose a different file<input type="file" accept="audio/*,.mp3,.m4a,.wav" data-act="song-file" id="songFile"></label>
+        <button class="btn danger wide-only" data-act="song-delete">Delete song</button>
+        <button class="btn square phone-only" data-act="song-menu" aria-label="More song actions">\u22ef</button>
       </div>
     </section>`;
   }
-  main.innerHTML = `<div class="cols wide-left">
+  main.innerHTML = `<div class="cols wide-left ${listMode()}">
     <aside class="stack">
       <input class="search" type="search" id="songSearch" placeholder="Search songs or players" value="${esc(ui.songQuery)}" autocomplete="off" aria-label="Search songs">
       <div class="list" id="songList">${list || (library.songs.length ? '<p class="hint">No songs match.</p>' : '')}</div>
@@ -604,7 +659,9 @@ function previewTick() {
   const step = () => {
     const t = edit.track;
     if (t && t.state !== 'done') edit.cursor = t.time;
-    const clock = $('#clock'); if (clock) clock.textContent = mmss(edit.cursor) + '.' + Math.floor((edit.cursor % 1) * 10);
+    const t10 = mmss(edit.cursor) + '.' + Math.floor((edit.cursor % 1) * 10);
+    const clock = $('#clock'); if (clock) clock.textContent = t10;
+    const wc = $('#waveClock'); if (wc) wc.textContent = t10;
     const btn = $('#pvToggle');
     if (btn) btn.querySelector('span').textContent = t && t.state === 'playing' ? 'Pause' : 'Play';
     drawWave();
@@ -635,6 +692,19 @@ function setSongField(s, key, raw) {
   if (key === 'fadeOut') s.fadeOut = Math.max(0, Math.min(10, v));
   if (key === 'volume') s.volume = Math.max(0.05, Math.min(1.5, v / 100));
   if (s.stop != null && s.stop <= s.start) s.stop = null;
+}
+
+function deletePrompt(s) {
+  const n = Model.songsUsing(team, s.id).length;
+  return n ? `Tap again: also removes it from ${n} player${n > 1 ? 's' : ''}` : 'Tap again to delete';
+}
+async function deleteSong(s) {
+  Model.removeSongEverywhere(team, s.id);
+  library.songs = library.songs.filter(x => x.id !== s.id);
+  delete peaksCache[s.id]; Store.remove('peaks:' + s.id).catch(() => {});
+  saveLibrary(); saveTeam();
+  await dropFileIfUnused(s.path);
+  ui.songId = null; ui.phoneDetail = false; render();
 }
 
 /* ==================================================================== 7. SETTINGS, DEMO, BACKUP */
@@ -871,7 +941,7 @@ function renderMoments() {
     const sameSection = team.moments.filter(x => x.section === m.section);
     const pos = sameSection.indexOf(m);
     const swatches = Model.COLORS.map(c => `<button class="swatch-btn c-${c}" data-act="m-color" data-v="${c}" aria-pressed="${m.color === c}" aria-label="${c}"></button>`).join('');
-    editor = `<section class="panel stack" style="gap:16px">
+    editor = `<section class="panel stack" style="gap:16px">${backBar(m.name)}
       <div class="grid2 moment-fields">
         <label class="field">Button name<input type="text" data-mf="name" value="${esc(m.name)}" autocomplete="off"></label>
         ${m.section === 'moments' ? `<div class="field">Button colour<div class="row">${swatches}</div></div>` : '<div></div>'}
@@ -900,7 +970,7 @@ function renderMoments() {
         <span class="spacer"></span><button class="btn danger" data-act="m-delete">Delete this moment</button></div>
     </section>`;
   }
-  main.innerHTML = `<div class="cols wide-left">
+  main.innerHTML = `<div class="cols wide-left ${listMode()}">
     <aside class="stack">
       <span class="section-title">Key moments</span><div class="list">${momentList('moments')}</div>
       <span class="section-title" style="margin-top:8px">Warmups &amp; breaks</span><div class="list">${momentList('breaks')}</div>
@@ -1205,6 +1275,7 @@ function render() {
 
 function go(view) {
   ui.view = view;
+  ui.phoneDetail = false;
   main.scrollTop = 0;
   render();
 }
@@ -1253,12 +1324,12 @@ async function onAction(e) {
     case 'game-tab': ui.gameTab = b.dataset.tab; return render();
     case 'moment': return playMoment(Model.findMoment(team, id));
     /* moments screen */
-    case 'pick-moment': ui.momentId = id; return render();
+    case 'pick-moment': ui.momentId = id; ui.phoneDetail = true; main.scrollTop = 0; return render();
     case 'm-new': {
       const name = await askText('New moment or playlist', 'Button name', '', 'Create');
       if (!name) return;
       const m = Model.newMoment({ name });
-      team.moments.push(m); ui.momentId = m.id; saveTeam(); return render();
+      team.moments.push(m); ui.momentId = m.id; ui.phoneDetail = true; saveTeam(); return render();
     }
     case 'm-color': case 'm-section': case 'm-mode': {
       const m = Model.findMoment(team, ui.momentId);
@@ -1307,6 +1378,20 @@ async function onAction(e) {
     case 'lu-bench': Model.benchPlayer(l, id); saveTeam(); return refreshOrderEditors();
     case 'lu-unbench': Model.unbenchPlayer(l, id); saveTeam(); return refreshOrderEditors();
     case 'lu-pick': ui.lineupId = id; return render();
+    case 'lu-menu': {
+      const cur = Model.findLineup(team, ui.lineupId);
+      const act = name => () => { const el = document.createElement('button'); el.dataset.act = name; onAction({ target: el }); };
+      return openMenu(cur.name, [
+        { label: '+ New lineup', run: act('lu-new') },
+        { label: 'Duplicate', run: act('lu-dup') },
+        { label: 'Rename', run: act('lu-rename') },
+        cur.id === game.lineupId ? null : { label: 'Use for the game', cls: 'gold', run: act('lu-use') },
+        { label: 'Delete this lineup', cls: 'danger', disabled: team.lineups.length < 2, keepOpen: true,
+          run: b => { if (!armed(b, 'Tap again to delete')) return; closeDialog(); deleteLineup(); } },
+      ]);
+    }
+    case 'phone-back': ui.phoneDetail = false; Sound.stopPreview(); return render();
+    case 'show-batters': ui.showAllBatters = !ui.showAllBatters; return render();
     case 'lu-use': game.lineupId = ui.lineupId; game.upNext = null; saveGame(); toast('The Game screen now uses this lineup, from batter 1.'); return render();
     case 'lu-new': {
       const name = await askText('New lineup', 'Name', `Game ${team.lineups.length + 1}`, 'Create');
@@ -1327,16 +1412,13 @@ async function onAction(e) {
     }
     case 'lu-delete': {
       if (!armed(b, 'Tap again to delete')) return;
-      const wasInUse = ui.lineupId === game.lineupId;
-      Model.removeLineup(team, ui.lineupId);
-      if (wasInUse) { game.lineupId = team.lineups[0].id; game.upNext = null; saveGame(); }
-      ui.lineupId = null; saveTeam(); return render();
+      return deleteLineup();
     }
     /* roster */
-    case 'pick-player': ui.playerId = id; return render();
+    case 'pick-player': ui.playerId = id; ui.phoneDetail = true; main.scrollTop = 0; return render();
     case 'player-add': {
       const np = Model.addPlayer(team, { first: '', last: '', number: '' });
-      ui.playerId = np.id; saveTeam(); render();
+      ui.playerId = np.id; ui.phoneDetail = true; saveTeam(); render();
       return document.querySelector('[data-pf="first"]').focus();
     }
     case 'player-remove': {
@@ -1351,14 +1433,14 @@ async function onAction(e) {
     case 'intro-remove': { const old = p.intro.path; p.intro = null; saveTeam(); await dropFileIfUnused(old); return render(); }
     case 'choose-song': return openSongPicker(p);
     case 'song-remove': p.songId = null; saveTeam(); return render();
-    case 'edit-clip': ui.songId = p.songId; return go('songs');
+    case 'edit-clip': ui.songId = p.songId; go('songs'); ui.phoneDetail = true; return render();
     case 'test-walkup': {
       const plan = Model.walkupPlan(p, library, settings);
       if (plan) Sound.walkup(plan, `Test · ${Model.playerName(p)}`, { playerId: p.id }).catch(() => toast('A file for this player isn’t on this device.'));
       return;
     }
     /* songs */
-    case 'pick-song': ui.songId = id; return render();
+    case 'pick-song': ui.songId = id; ui.phoneDetail = true; main.scrollTop = 0; return render();
     case 'pv-toggle':
       if (edit.track && edit.track.state === 'playing') { edit.cursor = edit.track.time; Sound.stopPreview(); edit.track = null; return previewTick(); }
       return previewFrom(edit.cursor >= (s.length || Infinity) - 0.5 ? 0 : edit.cursor);
@@ -1374,15 +1456,14 @@ async function onAction(e) {
       saveLibrary(); return refreshSongEditor();
     }
     case 'song-delete': {
-      const users = Model.songsUsing(team, s.id);
-      if (!armed(b, users.length ? `Tap again: also removes it from ${users.length} player${users.length > 1 ? 's' : ''}` : 'Tap again to delete')) return;
-      Model.removeSongEverywhere(team, s.id);
-      library.songs = library.songs.filter(x => x.id !== s.id);
-      delete peaksCache[s.id]; Store.remove('peaks:' + s.id).catch(() => {});
-      saveLibrary(); saveTeam();
-      await dropFileIfUnused(s.path);
-      ui.songId = null; return render();
+      if (!armed(b, deletePrompt(s))) return;
+      return deleteSong(s);
     }
+    case 'song-menu':
+      return openMenu(s.title, [
+        { label: 'Choose a different file', run: () => $('#songFile').click() },
+        { label: 'Delete song', cls: 'danger', keepOpen: true, run: x => { if (armed(x, deletePrompt(s))) { closeDialog(); deleteSong(s); } } },
+      ]);
   }
 }
 main.addEventListener('click', onAction);
@@ -1434,6 +1515,7 @@ main.addEventListener('input', e => {
 
 main.addEventListener('change', async e => {
   const t = e.target;
+  if (t.id === 'luSelect') { ui.lineupId = t.value; return render(); }
   if (t.id === 'gameLineup') { game.lineupId = t.value; game.upNext = null; saveGame(); return render(); }
   if (t.dataset.mf === 'skipPlayed') { Model.findMoment(team, ui.momentId).skipPlayed = t.checked; saveTeam(); return; }
   if (t.dataset.pf === 'active') {
@@ -1497,6 +1579,7 @@ main.addEventListener('pointerdown', e => {
   w.onpointerup = () => { w.onpointermove = null; };
 });
 window.addEventListener('resize', () => later('wave', drawWave, 100));
+phoneQuery.addEventListener('change', () => { if (!drag && !dlg.open) render(); });
 
 // dock
 $('#fadeAll').addEventListener('click', () => Sound.fadeAll(settings.fadeSeconds));
