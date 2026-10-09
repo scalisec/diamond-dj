@@ -1,0 +1,300 @@
+{
+ "team": {
+  "format": "diamond-team",
+  "version": 1,
+  "id": "demo_team",
+  "name": "U13 Burlington Bees (demo)",
+  "short": "U13 Bees",
+  "players": [
+   {
+    "id": "demo_p1",
+    "first": "Olivia",
+    "last": "Brooks",
+    "number": "2",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-1.mp3",
+     "name": "Announcement 1.mp3"
+    },
+    "songId": "demo_s1",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p2",
+    "first": "Mia",
+    "last": "Chen",
+    "number": "4",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-2.mp3",
+     "name": "Announcement 2.mp3"
+    },
+    "songId": "demo_s2",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p3",
+    "first": "Zoe",
+    "last": "Laurent",
+    "number": "11",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-3.mp3",
+     "name": "Announcement 3.mp3"
+    },
+    "songId": "demo_s3",
+    "entry": "after"
+   },
+   {
+    "id": "demo_p4",
+    "first": "Ava",
+    "last": "Martinez",
+    "number": "7",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-4.mp3",
+     "name": "Announcement 4.mp3"
+    },
+    "songId": "demo_s4",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p5",
+    "first": "Sophie",
+    "last": "Tremblay",
+    "number": "12",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-5.mp3",
+     "name": "Announcement 5.mp3"
+    },
+    "songId": "demo_s5",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p6",
+    "first": "Lily",
+    "last": "Okafor",
+    "number": "3",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-6.mp3",
+     "name": "Announcement 6.mp3"
+    },
+    "songId": "demo_s1",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p7",
+    "first": "Grace",
+    "last": "Nguyen",
+    "number": "21",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-7.mp3",
+     "name": "Announcement 7.mp3"
+    },
+    "songId": "demo_s2",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p8",
+    "first": "Emma",
+    "last": "Rossi",
+    "number": "9",
+    "active": true,
+    "intro": {
+     "path": "Announcements/demo-8.mp3",
+     "name": "Announcement 8.mp3"
+    },
+    "songId": "demo_s3",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p9",
+    "first": "Chloe",
+    "last": "Singh",
+    "number": "15",
+    "active": true,
+    "intro": null,
+    "songId": "demo_s4",
+    "entry": "under"
+   },
+   {
+    "id": "demo_p10",
+    "first": "Hannah",
+    "last": "Kowalski",
+    "number": "18",
+    "active": true,
+    "intro": null,
+    "songId": null,
+    "entry": "under"
+   }
+  ],
+  "moments": [],
+  "lineups": [
+   {
+    "id": "demo_l1",
+    "name": "Game 1",
+    "order": [
+     "demo_p1",
+     "demo_p2",
+     "demo_p3",
+     "demo_p4",
+     "demo_p5",
+     "demo_p6",
+     "demo_p7",
+     "demo_p8",
+     "demo_p9"
+    ],
+    "bench": [
+     "demo_p10"
+    ],
+    "updated": 0
+   },
+   {
+    "id": "demo_l2",
+    "name": "Tournament",
+    "order": [
+     "demo_p9",
+     "demo_p8",
+     "demo_p7",
+     "demo_p6",
+     "demo_p5",
+     "demo_p4",
+     "demo_p3",
+     "demo_p2",
+     "demo_p1"
+    ],
+    "bench": [
+     "demo_p10"
+    ],
+    "updated": 0
+   }
+  ]
+ },
+ "library": {
+  "format": "diamond-library",
+  "version": 1,
+  "songs": [
+   {
+    "id": "demo_s1",
+    "path": "Songs/Test Song 1 - Diamond DJ.mp3",
+    "title": "Test Song 1",
+    "artist": "Diamond DJ",
+    "length": 45,
+    "start": 20,
+    "stop": 35,
+    "fadeOut": 2,
+    "volume": 1,
+    "categories": []
+   },
+   {
+    "id": "demo_s2",
+    "path": "Songs/Test Song 2 - Diamond DJ.mp3",
+    "title": "Test Song 2",
+    "artist": "Diamond DJ",
+    "length": 45,
+    "start": 20,
+    "stop": 35,
+    "fadeOut": 2,
+    "volume": 1,
+    "categories": []
+   },
+   {
+    "id": "demo_s3",
+    "path": "Songs/Test Song 3 - Diamond DJ.mp3",
+    "title": "Test Song 3",
+    "artist": "Diamond DJ",
+    "length": 45,
+    "start": 20,
+    "stop": 35,
+    "fadeOut": 2,
+    "volume": 1,
+    "categories": []
+   },
+   {
+    "id": "demo_s4",
+    "path": "Songs/Test Song 4 - Diamond DJ.mp3",
+    "title": "Test Song 4",
+    "artist": "Diamond DJ",
+    "length": 45,
+    "start": 20,
+    "stop": 35,
+    "fadeOut": 2,
+    "volume": 1,
+    "categories": []
+   },
+   {
+    "id": "demo_s5",
+    "path": "Songs/Test Song 5 - Diamond DJ.mp3",
+    "title": "Test Song 5",
+    "artist": "Diamond DJ",
+    "length": 45,
+    "start": 0,
+    "stop": null,
+    "fadeOut": 2,
+    "volume": 1,
+    "categories": []
+   }
+  ]
+ },
+ "files": [
+  {
+   "path": "Songs/Test Song 1 - Diamond DJ.mp3",
+   "file": "Test Song 1 - Diamond DJ.mp3"
+  },
+  {
+   "path": "Songs/Test Song 2 - Diamond DJ.mp3",
+   "file": "Test Song 2 - Diamond DJ.mp3"
+  },
+  {
+   "path": "Songs/Test Song 3 - Diamond DJ.mp3",
+   "file": "Test Song 3 - Diamond DJ.mp3"
+  },
+  {
+   "path": "Songs/Test Song 4 - Diamond DJ.mp3",
+   "file": "Test Song 4 - Diamond DJ.mp3"
+  },
+  {
+   "path": "Songs/Test Song 5 - Diamond DJ.mp3",
+   "file": "Test Song 5 - Diamond DJ.mp3"
+  },
+  {
+   "path": "Announcements/demo-1.mp3",
+   "file": "Announcement 1.mp3"
+  },
+  {
+   "path": "Announcements/demo-2.mp3",
+   "file": "Announcement 2.mp3"
+  },
+  {
+   "path": "Announcements/demo-3.mp3",
+   "file": "Announcement 3.mp3"
+  },
+  {
+   "path": "Announcements/demo-4.mp3",
+   "file": "Announcement 4.mp3"
+  },
+  {
+   "path": "Announcements/demo-5.mp3",
+   "file": "Announcement 5.mp3"
+  },
+  {
+   "path": "Announcements/demo-6.mp3",
+   "file": "Announcement 6.mp3"
+  },
+  {
+   "path": "Announcements/demo-7.mp3",
+   "file": "Announcement 7.mp3"
+  },
+  {
+   "path": "Announcements/demo-8.mp3",
+   "file": "Announcement 8.mp3"
+  },
+  {
+   "path": "Announcements/demo-9.mp3",
+   "file": "Announcement 9.mp3"
+  }
+ ]
+}

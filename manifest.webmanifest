@@ -1,0 +1,16 @@
+{
+  "name": "Diamond DJ",
+  "short_name": "Diamond DJ",
+  "description": "Walk-up songs and game music for youth baseball and softball volunteers.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B2447",
+  "theme_color": "#0B2447",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

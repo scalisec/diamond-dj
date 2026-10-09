@@ -1,0 +1,305 @@
+/* Diamond DJ: the data model and the rules that don't touch the screen or the speakers.
+ * Pure functions only, so they run in the browser and in Node tests (tests/model.test.js).
+ *
+ * team    { format:'diamond-team', version, id, name, short, players[], lineups[], moments[] }
+ * player  { id, first, last, number, active, intro:{path}|null, songId|null, entry:'under'|'after' }
+ * lineup  { id, name, order:[playerId], bench:[playerId], updated }
+ * library { format:'diamond-library', version, songs[] }
+ * song    { id, path, title, artist, length, start, stop, fadeOut, volume, categories[] }
+ */
+'use strict';
+
+(function (root) {
+  const FORMAT_TEAM = 'diamond-team';
+  const FORMAT_LIBRARY = 'diamond-library';
+
+  let idCounter = 0;
+  function uid(prefix) {
+    const rand = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+    return `${prefix}_${rand}${(idCounter++).toString(36)}`;
+  }
+
+  /* ------------------------------------------------------------ teams and players */
+
+  function newTeam(name, short) {
+    const team = { format: FORMAT_TEAM, version: 1, id: uid('t'), name, short: short || name, players: [], lineups: [], moments: [] };
+    team.lineups.push(newLineup('Default'));
+    return team;
+  }
+
+  function newPlayer(fields = {}) {
+    return {
+      id: uid('p'),
+      first: (fields.first || '').trim(),
+      last: (fields.last || '').trim(),
+      number: String(fields.number ?? '').trim(),
+      active: fields.active !== false,
+      intro: fields.intro || null,
+      songId: fields.songId || null,
+      entry: fields.entry === 'after' ? 'after' : 'under',
+    };
+  }
+
+  function playerName(p) {
+    return [p.first, p.last].filter(Boolean).join(' ') || 'New player';
+  }
+
+  // jersey numbers sort as numbers ("2" before "12"); blanks last
+  function byNumber(a, b) {
+    const na = parseInt(a.number, 10), nb = parseInt(b.number, 10);
+    const ia = isNaN(na), ib = isNaN(nb);
+    if (ia !== ib) return ia ? 1 : -1;
+    if (!ia && na !== nb) return na - nb;
+    return playerName(a).localeCompare(playerName(b));
+  }
+
+  /* Ready = has a walk-up song that exists and an announcement. */
+  function playerStatus(player, library) {
+    const song = player.songId ? findSong(library, player.songId) : null;
+    const hasSong = !!song, hasIntro = !!(player.intro && player.intro.path);
+    if (hasSong && hasIntro) return 'ready';
+    if (hasSong) return 'no-intro';
+    if (hasIntro) return 'no-song';
+    return 'not-ready';
+  }
+
+  function addPlayer(team, fields) {
+    const p = newPlayer(fields);
+    team.players.push(p);
+    syncLineups(team);
+    return p;
+  }
+
+  function removePlayer(team, playerId) {
+    team.players = team.players.filter(p => p.id !== playerId);
+    syncLineups(team);
+  }
+
+  /* ------------------------------------------------------------ lineups */
+
+  function newLineup(name, order = [], bench = []) {
+    return { id: uid('l'), name: name || 'Lineup', order: [...order], bench: [...bench], updated: Date.now() };
+  }
+
+  /* Keeps every lineup consistent with the roster:
+     - removed players disappear;
+     - inactive players move to the bench;
+     - players a lineup has never seen join the end of its order (inactive ones, its bench);
+       an empty lineup is filled by jersey number. */
+  function syncLineups(team) {
+    const byId = new Map(team.players.map(p => [p.id, p]));
+    const active = team.players.filter(p => p.active).sort(byNumber).map(p => p.id);
+    for (const l of team.lineups) {
+      const before = JSON.stringify([l.order, l.bench]);
+      const seen = new Set();
+      l.order = l.order.filter(id => byId.has(id) && !seen.has(id) && seen.add(id));
+      l.bench = l.bench.filter(id => byId.has(id) && !seen.has(id) && seen.add(id));
+      const inactive = l.order.filter(id => !byId.get(id).active);
+      l.order = l.order.filter(id => byId.get(id).active);
+      l.bench.push(...inactive);
+      const missing = team.players.filter(p => !seen.has(p.id)).sort(byNumber).map(p => p.id);
+      // youth teams bat everyone: new active players join the end of the order, ready to bat
+      l.order.push(...missing.filter(id => active.includes(id)));
+      l.bench.push(...missing.filter(id => !active.includes(id)));
+      if (JSON.stringify([l.order, l.bench]) !== before) l.updated = Date.now();
+    }
+    if (team.lineups.length === 0) {
+      team.lineups.push(newLineup('Default', active, team.players.filter(p => !p.active).map(p => p.id)));
+    }
+    return team;
+  }
+
+  function findLineup(team, id) {
+    return team.lineups.find(l => l.id === id) || team.lineups[0] || null;
+  }
+
+  function duplicateLineup(team, id, name) {
+    const src = findLineup(team, id);
+    const copy = newLineup(name || `${src.name} copy`, src.order, src.bench);
+    team.lineups.splice(team.lineups.indexOf(src) + 1, 0, copy);
+    return copy;
+  }
+
+  function addLineup(team, name) {
+    const l = newLineup(name || `Lineup ${team.lineups.length + 1}`);
+    team.lineups.push(l);
+    syncLineups(team); // fills the order with active players by number
+    return l;
+  }
+
+  function removeLineup(team, id) {
+    if (team.lineups.length <= 1) return false; // always keep one
+    team.lineups = team.lineups.filter(l => l.id !== id);
+    return true;
+  }
+
+  function touch(l) { l.updated = Date.now(); return l; }
+
+  function moveInOrder(lineup, playerId, toIndex) {
+    const from = lineup.order.indexOf(playerId);
+    if (from < 0) return false;
+    const to = Math.max(0, Math.min(lineup.order.length - 1, toIndex));
+    if (from === to) return false;
+    lineup.order.splice(from, 1);
+    lineup.order.splice(to, 0, playerId);
+    touch(lineup);
+    return true;
+  }
+
+  function moveBy(lineup, playerId, delta) {
+    const i = lineup.order.indexOf(playerId);
+    return i >= 0 && moveInOrder(lineup, playerId, i + delta);
+  }
+
+  function benchPlayer(lineup, playerId) {
+    const i = lineup.order.indexOf(playerId);
+    if (i < 0) return false;
+    lineup.order.splice(i, 1);
+    if (!lineup.bench.includes(playerId)) lineup.bench.push(playerId);
+    touch(lineup);
+    return true;
+  }
+
+  function unbenchPlayer(lineup, playerId) {
+    const i = lineup.bench.indexOf(playerId);
+    if (i < 0) return false;
+    lineup.bench.splice(i, 1);
+    lineup.order.push(playerId);
+    touch(lineup);
+    return true;
+  }
+
+  /* ------------------------------------------------------------ batting order (auto-advance) */
+
+  /* Who is up next. `upNext` is a player id kept on the device. If that player is no longer
+     batting (benched or removed), the batter who was after them takes over: we can't know
+     that any more, so fall back to the top of the order. */
+  function upNextId(lineup, upNext) {
+    if (!lineup || lineup.order.length === 0) return null;
+    return lineup.order.includes(upNext) ? upNext : lineup.order[0];
+  }
+
+  function nextAfter(lineup, playerId) {
+    if (!lineup || lineup.order.length === 0) return null;
+    const i = lineup.order.indexOf(playerId);
+    if (i < 0) return lineup.order[0];
+    return lineup.order[(i + 1) % lineup.order.length];
+  }
+
+  /* The batters after `upNext`, in order, wrapping round, not repeating `upNext`. */
+  function comingUp(lineup, upNext) {
+    const first = upNextId(lineup, upNext);
+    if (!first) return [];
+    const i = lineup.order.indexOf(first);
+    return [...lineup.order.slice(i + 1), ...lineup.order.slice(0, i)];
+  }
+
+  function battingSlot(lineup, playerId) {
+    const i = lineup ? lineup.order.indexOf(playerId) : -1;
+    return i < 0 ? null : i + 1;
+  }
+
+  /* ------------------------------------------------------------ library */
+
+  function newLibrary() { return { format: FORMAT_LIBRARY, version: 1, songs: [] }; }
+
+  function findSong(library, id) { return library.songs.find(s => s.id === id) || null; }
+
+  function songFromFile(path, fields = {}) {
+    const base = path.split('/').pop().replace(/\.[^.]+$/, '');
+    // "Title - Artist" is the common way people name walk-up files
+    const parts = base.split(/\s+-\s+/);
+    return {
+      id: uid('s'),
+      path,
+      title: fields.title || parts[0].trim() || base,
+      artist: fields.artist ?? (parts.length > 1 ? parts.slice(1).join(' - ').trim() : ''),
+      length: fields.length || 0,
+      start: 0,
+      stop: null,
+      fadeOut: 2,
+      volume: 1,
+      categories: [],
+    };
+  }
+
+  function songLabel(song) {
+    return song ? [song.title, song.artist].filter(Boolean).join(' · ') : '';
+  }
+
+  function songsUsing(team, songId) {
+    return team.players.filter(p => p.songId === songId);
+  }
+
+  /* ------------------------------------------------------------ the walk-up plan */
+
+  /* Everything the audio engine needs to play one walk-up, worked out ahead of time.
+     settings: { walkupSeconds, duckLevel, riseSeconds } */
+  function walkupPlan(player, library, settings) {
+    const song = player.songId ? findSong(library, player.songId) : null;
+    const intro = player.intro && player.intro.path ? player.intro : null;
+    if (!song && !intro) return null;
+    let songPart = null;
+    if (song) {
+      const start = Math.max(0, song.start || 0);
+      let stop = song.stop != null && song.stop > start ? song.stop : start + settings.walkupSeconds;
+      if (song.length && stop > song.length) stop = song.length;
+      songPart = {
+        songId: song.id,
+        path: song.path,
+        start,
+        stop,
+        fadeOut: Math.max(0, Math.min(song.fadeOut ?? 2, stop - start)),
+        volume: song.volume ?? 1,
+      };
+    }
+    const under = !!(intro && songPart && player.entry !== 'after');
+    return {
+      playerId: player.id,
+      intro: intro ? { path: intro.path } : null,
+      song: songPart,
+      mode: !intro ? 'song' : !songPart ? 'intro' : under ? 'under' : 'after',
+      duckLevel: under ? settings.duckLevel : 1,
+      riseSeconds: settings.riseSeconds,
+    };
+  }
+
+  /* ------------------------------------------------------------ files: backup and checks */
+
+  function checkTeam(obj) {
+    if (!obj || obj.format !== FORMAT_TEAM || !Array.isArray(obj.players) || !Array.isArray(obj.lineups)) {
+      throw new Error('This isn’t a Diamond DJ team file.');
+    }
+    obj.moments = Array.isArray(obj.moments) ? obj.moments : [];
+    obj.players = obj.players.map(p => ({ ...newPlayer(p), id: String(p.id || uid('p')) }));
+    obj.lineups = obj.lineups.map(l => ({
+      id: String(l.id || uid('l')), name: String(l.name || 'Lineup'),
+      order: Array.isArray(l.order) ? l.order.map(String) : [],
+      bench: Array.isArray(l.bench) ? l.bench.map(String) : [],
+      updated: Number(l.updated) || Date.now(),
+    }));
+    syncLineups(obj);
+    return obj;
+  }
+
+  function checkLibrary(obj) {
+    if (!obj || obj.format !== FORMAT_LIBRARY || !Array.isArray(obj.songs)) {
+      throw new Error('This isn’t a Diamond DJ song library.');
+    }
+    obj.songs = obj.songs.filter(s => s && s.id && s.path).map(s => ({ ...songFromFile(s.path), ...s }));
+    return obj;
+  }
+
+  const api = {
+    uid, newTeam, newPlayer, playerName, byNumber, playerStatus, addPlayer, removePlayer,
+    newLineup, syncLineups, findLineup, duplicateLineup, addLineup, removeLineup,
+    moveInOrder, moveBy, benchPlayer, unbenchPlayer,
+    upNextId, nextAfter, comingUp, battingSlot,
+    newLibrary, findSong, songFromFile, songLabel, songsUsing,
+    walkupPlan, checkTeam, checkLibrary,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Model = api;
+})(typeof self !== 'undefined' ? self : this);

@@ -1,0 +1,237 @@
+/* Diamond DJ: Burlington Bees navy and gold, light background for outdoor sun. */
+
+@font-face { font-family: 'Barlow'; font-weight: 400; font-display: swap; src: url(fonts/barlow-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 500; font-display: swap; src: url(fonts/barlow-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 600; font-display: swap; src: url(fonts/barlow-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 700; font-display: swap; src: url(fonts/barlow-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 600; font-display: swap; src: url(fonts/barlow-condensed-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 700; font-display: swap; src: url(fonts/barlow-condensed-latin-700-normal.woff2) format('woff2'); }
+
+:root {
+  --navy: #0B2447;
+  --navy-2: #12305C;
+  --navy-line: #2D4A7A;
+  --blue: #1E56B8;
+  --blue-soft: #DCE6F7;
+  --gold: #F5B700;
+  --gold-text: #8A6400;
+  --gold-soft: #FFF6D6;
+  --ground: #EEF2F8;
+  --card: #FFFFFF;
+  --ink: #0B1730;
+  --muted: #4A5874;
+  --line: #D3DBE8;
+  --line-strong: #B8C5DA;
+  --red: #B42318;
+  --green: #2E7D46;
+  --head-ink: #DCE6F7;
+  --cond: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --r: 12px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font: 16px/1.35 Barlow, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.45; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+[hidden] { display: none !important; }
+h2, h3 { margin: 0; }
+svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.app { height: 100%; display: flex; flex-direction: column; }
+
+/* ------------------------------------------------------------ header */
+.head {
+  flex: none; display: flex; align-items: center; gap: 14px;
+  min-height: 72px; padding: 6px 16px; padding-top: max(6px, env(safe-area-inset-top));
+  background: var(--navy); color: #fff;
+}
+.logo { width: 46px; height: 54px; object-fit: contain; }
+.team-name { font-family: var(--cond); font-weight: 700; font-size: 22px; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; }
+.tabs { margin-left: auto; display: flex; align-items: flex-end; gap: 12px; }
+.tab-group { display: flex; flex-direction: column; gap: 3px; }
+.group-label { padding-left: 4px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #9FB3D6; }
+.group-label.in-game { color: var(--gold); }
+.group { display: flex; gap: 4px; padding: 4px; border-radius: var(--r); }
+.group.game { background: var(--navy-2); }
+.group.setup { padding: 3px; border: 1px solid var(--navy-line); }
+.group button { border: 0; background: none; color: var(--head-ink); font-weight: 600; padding: 9px 16px; border-radius: 9px; min-height: 40px; }
+.group button[aria-current="page"] { background: var(--gold); color: var(--navy); font-weight: 700; }
+.divider { width: 1px; height: 44px; background: var(--navy-line); }
+.icon-btn { width: 48px; height: 48px; border-radius: 10px; border: 1px solid var(--navy-line); background: var(--navy-2); color: #fff; display: grid; place-items: center; }
+.icon-btn svg { width: 22px; height: 22px; }
+
+/* ------------------------------------------------------------ layout */
+.main { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; }
+.cols { display: grid; gap: 20px; grid-template-columns: 380px minmax(0, 1fr); align-items: start; }
+.cols.wide-left { grid-template-columns: 420px minmax(0, 1fr); }
+.stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.section-title { font-family: var(--cond); font-weight: 700; font-size: 20px; letter-spacing: .06em; text-transform: uppercase; color: var(--navy); }
+.hint { margin: 0; font-size: 14px; color: var(--muted); }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+.empty { padding: 28px; text-align: center; color: var(--muted); background: var(--card); border: 2px dashed var(--line-strong); border-radius: 16px; }
+.empty b { color: var(--ink); }
+
+/* ------------------------------------------------------------ buttons and fields */
+.btn {
+  min-height: 44px; padding: 0 16px; border-radius: 10px; border: 2px solid var(--line);
+  background: var(--card); color: var(--navy); font-weight: 600; font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
+}
+.btn.primary { border: 0; background: var(--blue); color: #fff; font-weight: 700; }
+.btn.gold { border: 0; background: var(--gold); color: var(--navy); font-weight: 700; }
+.btn.navy { border: 0; background: var(--navy); color: var(--gold); font-weight: 700; }
+.btn.outline { border-color: var(--blue); color: var(--blue); font-weight: 700; }
+.btn.danger { border-color: #E8B4AE; color: var(--red); }
+.btn.big { min-height: 56px; font-size: 17px; padding: 0 20px; border-radius: var(--r); }
+.btn.small { min-height: 36px; padding: 0 12px; font-size: 14px; border-width: 1px; border-radius: 8px; }
+.btn.square { width: 40px; padding: 0; }
+.btn svg { width: 18px; height: 18px; }
+.btn .play { fill: currentColor; stroke: none; }
+.file-btn { position: relative; overflow: hidden; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--muted); min-width: 0; }
+.field input[type=text], .field input[type=search], .field input[type=number], .field select, .search {
+  height: 46px; border: 1px solid var(--line-strong); border-radius: 10px; padding: 0 12px;
+  font-size: 17px; color: var(--ink); background: var(--card); width: 100%;
+}
+.check { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.check input { width: 22px; height: 22px; accent-color: var(--blue); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.seg { display: inline-flex; gap: 4px; background: var(--ground); padding: 4px; border-radius: 10px; }
+.seg button { border: 0; background: none; min-height: 40px; padding: 0 14px; border-radius: 8px; font-weight: 600; color: var(--navy); }
+.seg button[aria-pressed="true"] { background: var(--navy); color: var(--gold); font-weight: 700; }
+.stepper { display: flex; gap: 6px; }
+.stepper button { width: 44px; height: 46px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--card); font-size: 20px; font-weight: 700; color: var(--navy); }
+.stepper input { flex: 1; min-width: 0; text-align: center; }
+
+/* ------------------------------------------------------------ list rows */
+.list { display: flex; flex-direction: column; gap: 6px; }
+.item {
+  display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card); text-align: left; width: 100%;
+}
+.item.sel { border: 3px solid var(--gold); padding: 4px 10px; }
+.item .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.item .name { font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .sub { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.num { flex: none; min-width: 38px; height: 32px; padding: 0 4px; border-radius: 8px; background: var(--blue-soft); color: var(--navy); display: grid; place-items: center; font-weight: 700; }
+.num.dark { background: var(--navy); color: var(--gold); }
+.slot { flex: none; width: 22px; font-size: 14px; font-weight: 700; color: var(--muted); }
+.tag { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--blue); white-space: nowrap; }
+.status { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.status.ready { color: var(--green); }
+.status.no-intro { color: var(--gold-text); }
+.status.no-song, .status.not-ready { color: var(--red); }
+.item.not-ready { opacity: .6; }
+
+/* ------------------------------------------------------------ game */
+.upnext { background: var(--card); border: 3px solid var(--gold); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.upnext .who { display: flex; align-items: center; gap: 14px; }
+.upnext .big-num { flex: none; width: 68px; height: 68px; border-radius: 14px; background: var(--navy); color: var(--gold); display: grid; place-items: center; font-family: var(--cond); font-weight: 700; font-size: 36px; }
+.eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold-text); }
+.upnext .player { font-family: var(--cond); font-weight: 700; font-size: 32px; line-height: 1.05; }
+.upnext .meta { font-size: 15px; color: var(--muted); }
+.play-walkup { flex: 1; min-height: 72px; border: 0; border-radius: var(--r); background: var(--blue); color: #fff; font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.play-walkup svg { width: 24px; height: 24px; fill: #fff; stroke: none; }
+.play-walkup:active { background: #17459A; }
+.skip { width: 96px; min-height: 72px; }
+.order .item { min-height: 56px; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.order .item.playing { background: var(--gold-soft); border-color: var(--gold); }
+.order .item.benched { opacity: .5; }
+
+/* ------------------------------------------------------------ lineup editor */
+.edit-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.edit-row.dragging { border: 2px solid var(--blue); box-shadow: 0 6px 18px rgba(11, 36, 71, .18); position: relative; z-index: 2; }
+.edit-row.up { background: var(--gold-soft); }
+.handle { flex: none; width: 40px; height: 44px; display: grid; place-items: center; color: #8090AA; touch-action: none; cursor: grab; border: 0; background: none; }
+.handle svg { width: 22px; height: 22px; }
+.edit-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.bench { padding: 14px; border-radius: var(--r); border: 2px dashed var(--line-strong); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chip { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-weight: 600; }
+.pill { padding: 4px 10px; border-radius: 999px; background: var(--gold); color: var(--navy); font-size: 13px; font-weight: 700; }
+.lineup-title { font-family: var(--cond); font-size: 30px; font-weight: 700; color: var(--navy); }
+
+/* ------------------------------------------------------------ roster / songs */
+.slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.slotcard { border: 2px solid var(--blue-soft); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.slotcard.song { border-color: var(--gold); }
+.slotcard .k { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
+.slotcard.song .k { color: var(--gold-text); }
+.slotcard .v { font-weight: 700; font-size: 18px; overflow-wrap: anywhere; }
+.slotcard .v.none { color: var(--red); font-weight: 600; }
+.band { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border-radius: var(--r); background: var(--ground); }
+.player-head { display: flex; align-items: center; gap: 16px; }
+.player-head .big-num { width: 72px; height: 72px; border-radius: 16px; background: var(--navy); color: var(--gold); display: grid; place-items: center; font-family: var(--cond); font-weight: 700; font-size: 40px; flex: none; }
+.player-head h2 { font-family: var(--cond); font-size: 34px; }
+
+.wave { position: relative; height: 150px; border-radius: var(--r); background: var(--navy); overflow: hidden; touch-action: none; cursor: pointer; }
+.wave canvas { width: 100%; height: 100%; display: block; }
+.wave .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--head-ink); font-weight: 600; }
+.clock { font-family: var(--cond); font-size: 30px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+.missing { border-style: dashed; }
+
+/* ------------------------------------------------------------ now playing */
+.dock { flex: none; display: flex; align-items: center; gap: 16px; min-height: 92px; padding: 10px 20px; padding-bottom: max(10px, env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); }
+.dock-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.dock-idle { color: var(--muted); font-weight: 500; }
+.np-line { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.np-kind { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold-text); }
+.np-name { font-weight: 600; font-size: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.np-time { margin-left: auto; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { height: 8px; border-radius: 4px; background: var(--blue-soft); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--blue); }
+.vol { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.vol input { width: 120px; accent-color: var(--blue); }
+.dock .btn.fade { min-height: 64px; padding: 0 28px; border: 0; background: var(--gold); color: var(--navy); font-size: 20px; font-weight: 700; border-radius: var(--r); }
+.dock .btn.stop { min-height: 64px; padding: 0 24px; border: 0; background: var(--red); color: #fff; font-size: 20px; font-weight: 700; border-radius: var(--r); }
+
+/* ------------------------------------------------------------ dialog, toast */
+dialog { border: 0; border-radius: 18px; padding: 0; width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 32px); color: var(--ink); background: var(--card); }
+dialog::backdrop { background: rgba(11, 36, 71, .55); }
+.dlg-head { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--navy); color: #fff; }
+.dlg-head h2 { flex: 1; font-family: var(--cond); font-size: 24px; }
+.dlg-head .btn { border: 0; background: var(--gold); color: var(--navy); font-weight: 700; }
+.dlg-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.dlg-body h3 { font-family: var(--cond); font-size: 20px; letter-spacing: .04em; text-transform: uppercase; color: var(--navy); margin-top: 6px; }
+.setting { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--ground); }
+.setting > span:first-child { flex: 1; }
+.setting output { font-weight: 700; color: var(--blue); min-width: 56px; text-align: right; }
+.setting input[type=range] { width: 180px; accent-color: var(--blue); }
+.toast { position: fixed; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 12px; background: var(--navy); color: #fff; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.pick-list { max-height: 50vh; overflow: auto; }
+
+/* ------------------------------------------------------------ phones and narrow tablets */
+@media (max-width: 900px) {
+  .cols, .cols.wide-left { grid-template-columns: minmax(0, 1fr); }
+  .team-name { display: none; }
+  .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .head { gap: 8px; padding-left: 10px; padding-right: 10px; }
+  .logo { width: 34px; height: 40px; }
+  .group-label { display: none; }
+  .group button { padding: 8px 10px; font-size: 15px; }
+  .divider { height: 36px; }
+  .tabs { gap: 6px; }
+  .main { padding: 12px; }
+  .slots, .grid2 { grid-template-columns: minmax(0, 1fr); }
+  .dock { flex-wrap: wrap; gap: 8px; min-height: 0; padding: 10px 12px; }
+  .dock-info { flex-basis: 100%; }
+  .vol { display: none; }
+  .dock .btn.fade { flex: 2; min-height: 54px; }
+  .dock .btn.stop { flex: 1; min-height: 54px; }
+  .upnext .player { font-size: 27px; }
+  .play-walkup { min-height: 64px; font-size: 21px; }
+}
