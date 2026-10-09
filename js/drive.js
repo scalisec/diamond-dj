@@ -18,7 +18,7 @@
 
 const DRIVE = {
   folder: '1MxthsfclhrkPxi8diFOQOhvwj9OZA0Go', // the "Diamond DJ" folder
-  clientId: '',                                 // Google OAuth client ID (Web application); set once the Cloud project exists
+  clientId: '102151904195-r85e2dru4p965se44seqo6tt2jk829bn.apps.googleusercontent.com', // Google OAuth client (Web application), Diamond DJ Cloud project
   api: 'https://www.googleapis.com/drive/v3/',
   upload: 'https://www.googleapis.com/upload/drive/v3/',
   auth: 'https://accounts.google.com/o/oauth2/v2/auth',
