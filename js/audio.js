@@ -152,9 +152,13 @@ const Sound = (() => {
       this.src = src;
     }
     _tick() {
-      if (this.state === 'playing' && this.stop != null) {
+      if (this.state === 'playing') {
         const left = this.end - this.time;
-        if (left <= Math.max(0.05, this.fadeOut)) this.fade(Math.max(0.05, left));
+        // a playlist moves on a little before the end so the songs overlap
+        if (this.onnearend && this.nearEnd && isFinite(left) && left <= this.nearEnd) {
+          const cb = this.onnearend; this.onnearend = null; cb(this);
+        }
+        if (this.state === 'playing' && this.stop != null && left <= Math.max(0.05, this.fadeOut)) this.fade(Math.max(0.05, left));
       }
       changed();
     }
@@ -198,7 +202,7 @@ const Sound = (() => {
   /* ---------------------------------------------------------------- public */
 
   function fadeAll(secs = settings.fadeSeconds, except = null) {
-    for (const t of [...tracks]) if (t !== except && t.group !== except) t.fade(secs);
+    for (const t of [...tracks]) if (except == null || (t !== except && t.group !== except)) t.fade(secs);
     groupSeq++; // cancels anything still waiting to start (an "after" song)
   }
 
@@ -207,12 +211,49 @@ const Sound = (() => {
     for (const t of [...tracks]) t.stopNow();
   }
 
-  /* Play one sound by itself (fading out whatever is playing). */
-  async function playOne(opts) {
-    fadeAll();
+  /* Play one sound. It fades out whatever is playing, unless `layer` is set
+     (short sound effects play over the music). */
+  async function playOne(opts, { layer = false } = {}) {
+    if (!layer) fadeAll();
     const t = new Track(opts);
     await t.play();
     return t;
+  }
+
+  /* A playlist that keeps going: `nextItem()` returns the next track's options (or null to end).
+     Songs overlap by `xfade` seconds. skip() moves on now. Anything that fades everything
+     (another moment, a walk-up, Fade out) ends the playlist. */
+  async function playlist(nextItem, { xfade = 4, meta = {} } = {}) {
+    fadeAll();
+    const myGroup = ++groupSeq;
+    const group = `playlist-${myGroup}`;
+    const ctl = {
+      group, current: null,
+      get live() { return myGroup === groupSeq; },
+      async playNext(fadeIn = 0) {
+        if (!ctl.live) return null;
+        const item = nextItem();
+        if (!item) return null;
+        const t = new Track({ ...item, ...meta, group, kind: 'playlist' });
+        t.nearEnd = xfade;
+        t.onnearend = () => { if (ctl.live) { ctl.playNext(Math.min(2, xfade)); t.fade(xfade); } };
+        ctl.current = t;
+        try { await t.play(fadeIn); ctl.misses = 0; }
+        catch (e) { // a missing file: try the next song, but not forever
+          ctl.misses = (ctl.misses || 0) + 1;
+          if (ctl.live && ctl.misses < 25) return ctl.playNext(fadeIn);
+          throw e;
+        }
+        return t;
+      },
+      skip() {
+        const old = ctl.current;
+        if (old) { old.onnearend = null; old.fade(1.5); }
+        return ctl.playNext(0.5);
+      },
+    };
+    await ctl.playNext();
+    return ctl;
   }
 
   /* Play a walk-up from Model.walkupPlan(). Resolves when it has started. */
@@ -296,7 +337,7 @@ const Sound = (() => {
     unlock: audioCtx,
     setLoader(fn) { loader = fn; },
     onChange(fn) { listener = fn; },
-    forget, fadeAll, stopAll, playOne, walkup, preview, stopPreview, peaks, measure, setMaster,
+    forget, fadeAll, stopAll, playOne, playlist, walkup, preview, stopPreview, peaks, measure, setMaster,
     playing: () => tracks.filter(t => t.kind !== 'preview' && t.state !== 'done'),
   };
 })();

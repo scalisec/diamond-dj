@@ -10,6 +10,8 @@
  *   7. SETTINGS, DEMO, BACKUP
  *   8. NOW PLAYING
  *   9. EVENTS AND STARTUP
+ *  10. KEY MOMENTS (playing them on Game, editing them on Moments)
+ *  11. LOCK
  */
 'use strict';
 
@@ -20,16 +22,21 @@ const DEFAULTS = {
   walkupSeconds: 15,   // walk-up length when a song has no stop point
   duckLevel: 0.25,     // song volume under the announcement
   riseSeconds: 1,      // how fast the song comes up when the announcement ends
+  playlistXfade: 4,    // overlap between songs in a playlist
+  layerSeconds: 5,     // clips shorter than this (sound effects) play over the music
   masterVolume: 1,
+  locked: false,       // Lock: hides setup screens and settings on this device
 };
 
 let team = null;        // Model team
 let library = null;     // Model library
-let game = { lineupId: null, upNext: null, lastPlayed: null };
+// game state on this device: lineup in use, who's up next, songs played this game, where each moment got to
+let game = { lineupId: null, upNext: null, lastPlayed: null, played: [], cursors: {} };
 let settings = { ...DEFAULTS };
 const stored = new Set(); // paths of audio files on this device
 
-const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '' };
+const ui = { view: 'game', playerId: null, songId: null, lineupId: null, songQuery: '', gameTab: 'walkups', momentId: null };
+const SETUP_VIEWS = ['roster', 'songs', 'moments'];
 
 const timers = {};
 function later(key, fn, ms = 300) { clearTimeout(timers[key]); timers[key] = setTimeout(fn, ms); }
@@ -147,11 +154,24 @@ function playingPlayerId() {
 }
 
 function renderGame() {
+  const tabs = [['walkups', 'Walkups'], ['moments', 'Moments'], ['breaks', 'Breaks']]
+    .map(([k, label]) => `<button data-act="game-tab" data-tab="${k}" aria-pressed="${ui.gameTab === k}">${label}</button>`).join('');
+  main.innerHTML = `<div class="game-wrap" data-tab="${ui.gameTab}">
+    <div class="seg phone-tabs" role="group" aria-label="Show">${tabs}</div>
+    <div class="cols game-cols">
+      <section class="stack" data-gtab="walkups">${walkupsHtml()}</section>
+      <section class="stack">
+        <div data-gtab="moments" class="stack">${padsHtml('moments')}</div>
+        <div data-gtab="breaks" class="stack">${padsHtml('breaks')}</div>
+      </section>
+    </div></div>`;
+}
+
+function walkupsHtml() {
   const l = lineup();
   if (!team.players.length) {
-    main.innerHTML = `<div class="empty"><p><b>No players yet.</b></p><p>Add the team in Roster, or try the app with the demo team.</p>
-      <div class="row" style="justify-content:center"><button class="btn primary" data-act="go" data-view="roster">Go to Roster</button><button class="btn" data-act="load-demo">Load the demo team</button></div></div>`;
-    return;
+    return `<div class="empty"><p><b>No players yet.</b></p><p>Add the team in Roster, or try the app with the demo team.</p>
+      <div class="row" style="justify-content:center">${settings.locked ? '' : '<button class="btn primary" data-act="go" data-view="roster">Go to Roster</button><button class="btn" data-act="load-demo">Load the demo team</button>'}</div></div>`;
   }
   const { first, tags } = batterTags(l);
   const p = player(first);
@@ -186,21 +206,14 @@ function renderGame() {
       <span class="tag">${esc(tag)}</span></button>`;
   }).join('');
 
-  main.innerHTML = `<div class="cols">
-    <section class="stack">
-      <div class="row"><span class="section-title">Batting order</span><span class="spacer"></span>
+  return `<div class="row"><span class="section-title">Batting order</span><span class="spacer"></span>
         <label class="field" style="flex-direction:row;align-items:center;gap:8px"><span>Lineup</span>
           <select id="gameLineup" style="height:40px;font-size:15px;width:auto">${lineupOptions}</select></label></div>
       ${card}
-      <div class="row"><button class="btn" data-act="edit-order">Edit order</button><button class="btn" data-act="top">Start from batter 1</button></div>
-    </section>
-    <section class="stack">
-      <div class="row"><span class="section-title">${l.order.length} batting</span><span class="spacer"></span>
-        <span class="hint">Tap a player to play them · press and hold to make them up next</span></div>
+      <div class="row"><button class="btn" data-act="edit-order">Edit order</button><button class="btn" data-act="top">Start from batter 1</button>
+        <button class="btn" data-act="new-game">New game</button></div>
       <div class="list order">${rows}</div>
-      ${l.bench.length ? `<p class="hint">On the bench: ${l.bench.map(id => esc(Model.playerName(player(id)))).join(', ')}</p>` : ''}
-    </section>
-  </div>`;
+      <p class="hint">Tap a player to play them · press and hold to make them up next${l.bench.length ? `<br>On the bench: ${l.bench.map(id => esc(Model.playerName(player(id)))).join(', ')}` : ''}</p>`;
 }
 
 async function playBatter(id) {
@@ -470,6 +483,9 @@ function renderSongs() {
         ${stepper('Volume (%)', 'volume', Math.round((s.volume ?? 1) * 100))}
       </div>
       <p class="hint">Plays ${clipText(s)}${s.length ? ` of ${mmss(s.length)}` : ''}. ${s.stop == null ? `With no stop point a walk-up plays for ${settings.walkupSeconds} seconds.` : ''}</p>
+      <div class="row"><b>Moments</b>
+        ${Model.momentsWithSong(team, s.id).map(m => `<button class="chip on" data-act="sm-remove" data-id="${esc(m.id)}" aria-label="Remove from ${esc(m.name)}">${esc(m.name)} ✕</button>`).join('')}
+        <button class="chip add" data-act="sm-add">+ Add to a moment</button></div>
       <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
         <span class="hint">${users.length ? 'Walk-up for <b>' + esc(users.map(Model.playerName).join(', ')) + '</b>' : 'Not anyone’s walk-up yet.'}</span>
         <span class="spacer"></span>
@@ -604,6 +620,7 @@ function openSettings() {
     ${row('Walk-up length when a song has no stop point', 'walkupSeconds', 5, 30, 1, v => v + ' s')}
     ${row('Song volume under the announcement', 'duckLevel', 0, 0.6, 0.05, v => Math.round(v * 100) + '%')}
     ${row('Song comes up after the announcement over', 'riseSeconds', 0.2, 3, 0.1, v => (+v).toFixed(1) + ' s')}
+    ${row('Playlist songs overlap by', 'playlistXfade', 0, 10, 0.5, v => v + ' s')}
     <h3>Back up</h3>
     <p class="hint">Saves the roster, lineups, song names and cut points in a small file. The music isn’t in it: keep your MP3s and announcement clips too.</p>
     <div class="row"><button class="btn" id="setSave">Save a backup file</button>
@@ -613,7 +630,7 @@ function openSettings() {
     <div class="row"><button class="btn" id="setDemo">Load the demo team</button></div>
     <h3>This device</h3>
     <p class="hint" id="setStorage">Checking storage…</p>
-    <p class="hint">Diamond DJ ${esc(window.APP_VERSION || '')} · Phase 1</p>`, () => render());
+    <p class="hint">Diamond DJ ${esc(window.APP_VERSION || '')}</p>`, () => render());
 
   $('#setTeamName').oninput = e => { team.name = e.target.value; team.short = e.target.value; saveTeam(); $('#teamName').textContent = team.name || 'Diamond DJ'; };
   $('#setNewGame').onclick = e => { if (!armed(e.currentTarget, 'Tap again: start from batter 1')) return; newGame(); };
@@ -641,8 +658,10 @@ function newGame() {
   const l = lineup();
   game.upNext = l.order[0] || null;
   game.lastPlayed = null;
+  game.played = [];
+  game.cursors = {};
   saveGame();
-  toast('New game: back to batter 1.');
+  toast('New game: back to batter 1, and every song can play again.');
 }
 
 function download(name, text) {
@@ -688,7 +707,7 @@ async function loadDemo() {
     }
     team = Model.checkTeam(demo.team);
     library.songs = library.songs.filter(s => !demo.library.songs.some(d => d.id === s.id)).concat(Model.checkLibrary(demo.library).songs);
-    game = { lineupId: team.lineups[0].id, upNext: null, lastPlayed: null };
+    game = { lineupId: team.lineups[0].id, upNext: null, lastPlayed: null, played: [], cursors: {} };
     ui.playerId = null; ui.songId = null; ui.lineupId = null;
     saveTeam(); saveLibrary(); saveGame();
     closeDialog();
@@ -702,16 +721,17 @@ async function loadDemo() {
 
 /* ==================================================================== 8. NOW PLAYING */
 
-const KIND = { walkup: 'Walkup', intro: 'Announcement', preview: 'Preview', sound: 'Playing' };
+const KIND = { walkup: 'Walkup', intro: 'Announcement', preview: 'Preview', sound: 'Playing', playlist: 'Playlist' };
 let lastPlayingSig = '';
 function renderDock() {
   const all = Sound.tracks.filter(t => t.state !== 'done');
-  const t = all.find(t => t.kind === 'walkup' && t.state !== 'loading') || all.find(t => t.kind === 'intro') || all[0];
+  const t = all.find(t => t.kind === 'walkup' && t.state === 'playing') || all.find(t => t.kind === 'intro')
+    || all.find(t => t.state === 'playing' && t.kind !== 'preview') || all[0];
   const info = $('#dockInfo');
   if (!t) {
     if (!info.querySelector('.dock-idle')) info.innerHTML = '<span class="dock-idle">Nothing playing</span>';
   } else {
-    const from = t.kind === 'walkup' ? t.start : 0;
+    const from = t.kind === 'preview' || t.kind === 'intro' ? 0 : t.start;
     const total = Math.max(0.1, (t.kind === 'preview' ? t.duration : t.end) - from);
     const el = Math.max(0, t.time - from);
     info.innerHTML = `<div class="np-line"><span class="np-kind">${KIND[t.kind] || 'Playing'}${t.state === 'fading' ? ' · fading' : ''}</span>
@@ -719,9 +739,210 @@ function renderDock() {
       <div class="bar"><i style="width:${Math.min(100, (el / total) * 100).toFixed(1)}%"></i></div>`;
   }
   // re-draw the game list when who's playing changes
-  const sig = String(playingPlayerId());
+  const sig = String(playingPlayerId()) + [...playingMomentIds()].join(',');
   if (sig !== lastPlayingSig) { lastPlayingSig = sig; if (ui.view === 'game' && !dlg.open) renderGame(); }
 }
+
+/* ==================================================================== 10. KEY MOMENTS */
+
+const MODE_TEXT = { random: 'random', order: 'in order', playlist: 'playlist' };
+let activePlaylist = null; // { momentId, ctl }
+
+function momentSongs(m) { return m.songIds.map(song).filter(Boolean); }
+function playingMomentIds() {
+  return new Set(Sound.playing().filter(t => t.momentId && (t.state === 'playing' || t.state === 'loading')).map(t => t.momentId));
+}
+
+function padsHtml(section) {
+  const list = team.moments.filter(m => m.section === section);
+  const title = section === 'moments' ? 'Key moments' : 'Warmups &amp; breaks';
+  const playing = playingMomentIds();
+  const pads = list.map(m => {
+    const n = momentSongs(m).length;
+    const on = playing.has(m.id);
+    const meta = !n ? 'No songs yet'
+      : on ? (m.mode === 'playlist' ? 'Playing · tap for next song' : 'Playing · tap to fade')
+      : `${n} song${n > 1 ? 's' : ''} · ${MODE_TEXT[m.mode]}`;
+    return `<button class="pad ${section === 'breaks' ? 'pad-break' : 'c-' + m.color} ${on ? 'on' : ''} ${n ? '' : 'empty-pad'}" data-act="moment" data-id="${esc(m.id)}">
+      <span class="pad-name">${esc(m.name)}</span><span class="pad-meta">${meta}</span></button>`;
+  }).join('');
+  return `<div class="row"><span class="section-title">${title}</span><span class="spacer"></span>
+      ${section === 'moments' ? '<span class="hint">Tap to play · tap again to fade</span>' : ''}</div>
+    ${list.length ? `<div class="pads">${pads}</div>` : `<p class="hint">None yet.${settings.locked ? '' : ' Add some in <b>Moments</b>.'}</p>`}`;
+}
+
+async function playMoment(m) {
+  const playing = playingMomentIds();
+  if (playing.has(m.id)) {
+    // second tap: a playlist moves to its next song, anything else fades out
+    if (m.mode === 'playlist' && activePlaylist && activePlaylist.momentId === m.id && activePlaylist.ctl.live) return activePlaylist.ctl.skip();
+    for (const t of Sound.tracks) if (t.momentId === m.id) t.fade(settings.fadeSeconds);
+    return;
+  }
+  if (!momentSongs(m).length) return toast(settings.locked ? `${m.name} has no songs yet.` : `${m.name} has no songs yet. Add them in Moments.`);
+  const itemFor = pick => {
+    const s = song(pick.songId);
+    Model.notePlayed(m, library, game, s.id);
+    saveGame();
+    const c = Model.clipOf(s);
+    return { path: c.path, start: c.start, stop: c.stop, fadeOut: c.fadeOut, level: c.volume, label: `${m.name} · ${s.title}`, momentId: m.id, clipLength: c.length };
+  };
+  try {
+    if (m.mode === 'playlist') {
+      const ctl = await Sound.playlist(() => { const pick = Model.pickSong(m, library, game); return pick ? itemFor(pick) : null; },
+        { xfade: settings.playlistXfade, meta: { momentId: m.id } });
+      activePlaylist = { momentId: m.id, ctl };
+    } else {
+      const item = itemFor(Model.pickSong(m, library, game));
+      const layer = item.clipLength != null && item.clipLength < settings.layerSeconds;
+      await Sound.playOne({ ...item, kind: 'sound' }, { layer });
+    }
+  } catch (e) {
+    console.warn(e);
+    toast('That song’s file isn’t on this device.');
+  }
+}
+
+function momentList(section) {
+  return team.moments.filter(m => m.section === section).map(m => {
+    const n = momentSongs(m).length;
+    return `<button class="item ${m.id === ui.momentId ? 'sel' : ''}" data-act="pick-moment" data-id="${esc(m.id)}">
+      <span class="swatch ${section === 'breaks' ? 'c-light' : 'c-' + m.color}"></span>
+      <span class="grow"><span class="name">${esc(m.name)}</span></span>
+      <span class="sub">${n} · ${MODE_TEXT[m.mode]}</span></button>`;
+  }).join('') || '<p class="hint">None yet.</p>';
+}
+
+function renderMoments() {
+  if (ui.momentId && !Model.findMoment(team, ui.momentId)) ui.momentId = null;
+  if (!ui.momentId && team.moments.length) ui.momentId = team.moments[0].id;
+  const m = Model.findMoment(team, ui.momentId);
+  let editor = '<div class="empty"><p><b>No moments yet.</b></p><p>Tap <b>+ New moment</b> to make a button for the Game screen.</p></div>';
+  if (m) {
+    const songs = momentSongs(m);
+    const ordered = m.mode !== 'random';
+    const rows = songs.map((s, i) => `<div class="edit-row">
+        <span class="slot">${ordered ? i + 1 : ''}</span>
+        <span class="grow"><span class="name">${esc(Model.songLabel(s))}</span><span class="sub">${stored.has(s.path) ? '' : 'File not on this device · '}${s.stop != null ? clipText(s) : 'from ' + mmss(s.start) + ' to the end'}</span></span>
+        <button class="btn small" data-act="m-listen" data-id="${esc(s.id)}">Listen</button>
+        ${ordered ? `<button class="btn small square" data-act="m-song-up" data-id="${esc(s.id)}" aria-label="Move earlier" ${i ? '' : 'disabled'}>↑</button>
+        <button class="btn small square" data-act="m-song-down" data-id="${esc(s.id)}" aria-label="Move later" ${i < songs.length - 1 ? '' : 'disabled'}>↓</button>` : ''}
+        <button class="btn small square danger" data-act="m-song-remove" data-id="${esc(s.id)}" aria-label="Remove from ${esc(m.name)}">✕</button></div>`).join('');
+    const sameSection = team.moments.filter(x => x.section === m.section);
+    const pos = sameSection.indexOf(m);
+    const swatches = Model.COLORS.map(c => `<button class="swatch-btn c-${c}" data-act="m-color" data-v="${c}" aria-pressed="${m.color === c}" aria-label="${c}"></button>`).join('');
+    editor = `<section class="panel stack" style="gap:16px">
+      <div class="grid2" style="grid-template-columns:2fr 1fr">
+        <label class="field">Button name<input type="text" data-mf="name" value="${esc(m.name)}" autocomplete="off"></label>
+        ${m.section === 'moments' ? `<div class="field">Button colour<div class="row">${swatches}</div></div>` : '<div></div>'}
+      </div>
+      <div class="row"><b>Shows under</b>
+        <div class="seg" role="group" aria-label="Shows under">
+          <button data-act="m-section" data-v="moments" aria-pressed="${m.section === 'moments'}">Key moments</button>
+          <button data-act="m-section" data-v="breaks" aria-pressed="${m.section === 'breaks'}">Warmups &amp; breaks</button></div></div>
+      <div class="row"><b>When tapped, play</b>
+        <div class="seg" role="group" aria-label="When tapped, play">
+          <button data-act="m-mode" data-v="random" aria-pressed="${m.mode === 'random'}">A random song</button>
+          <button data-act="m-mode" data-v="order" aria-pressed="${m.mode === 'order'}">The next song in order</button>
+          <button data-act="m-mode" data-v="playlist" aria-pressed="${m.mode === 'playlist'}">A playlist (keeps going)</button></div></div>
+      ${m.mode === 'random' ? `<label class="check"><input type="checkbox" data-mf="skipPlayed" ${m.skipPlayed ? 'checked' : ''}>Skip songs already played this game</label>` : ''}
+      <p class="hint">${m.mode === 'playlist' ? `Plays the songs one after another, overlapping by ${settings.playlistXfade} s. A second tap skips to the next song; Fade out stops it.`
+        : m.mode === 'order' ? 'Each tap plays the next song in the list. A second tap while it plays fades it out.'
+        : 'Each tap plays a different song. A second tap while it plays fades it out.'} Songs play from their start point to their stop point, or to the end. Clips under ${settings.layerSeconds} s play over the music.</p>
+      <div class="stack">
+        <div class="row"><b>Songs in ${esc(m.name)} · ${songs.length}</b><span class="spacer"></span>
+          <button class="btn outline" data-act="m-add-songs">+ Add songs from the library</button></div>
+        <div class="list">${rows || '<p class="hint">No songs yet.</p>'}</div>
+      </div>
+      <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
+        <button class="btn" data-act="m-move" data-d="-1" ${pos > 0 ? '' : 'disabled'}>Move earlier</button>
+        <button class="btn" data-act="m-move" data-d="1" ${pos < sameSection.length - 1 ? '' : 'disabled'}>Move later</button>
+        <span class="spacer"></span><button class="btn danger" data-act="m-delete">Delete this moment</button></div>
+    </section>`;
+  }
+  main.innerHTML = `<div class="cols wide-left">
+    <aside class="stack">
+      <span class="section-title">Key moments</span><div class="list">${momentList('moments')}</div>
+      <span class="section-title" style="margin-top:8px">Warmups &amp; breaks</span><div class="list">${momentList('breaks')}</div>
+      <button class="btn outline big" data-act="m-new">+ New moment or playlist</button>
+    </aside>${editor}</div>`;
+}
+
+/* A list of every song with on/off toggles, for putting songs in a moment (or a song in moments). */
+function openToggleList(title, items, isOn, toggle) {
+  const html = () => items().map(it => `<button class="item" data-tog="${esc(it.id)}" aria-pressed="${isOn(it.id)}">
+      <span class="tick" aria-hidden="true">${isOn(it.id) ? '✓' : ''}</span>
+      <span class="grow"><span class="name">${esc(it.name)}</span>${it.sub ? `<span class="sub">${esc(it.sub)}</span>` : ''}</span></button>`).join('')
+    || '<p class="hint">Nothing here yet.</p>';
+  openDialog(title, `<input class="search" type="search" id="togSearch" placeholder="Search" autocomplete="off">
+    <div class="list pick-list" id="togList">${html()}</div>`, () => render());
+  const filter = () => {
+    const q = $('#togSearch').value.toLowerCase();
+    for (const b of document.querySelectorAll('[data-tog]')) b.hidden = !b.textContent.toLowerCase().includes(q);
+  };
+  $('#togSearch').oninput = filter;
+  $('#togList').onclick = e => {
+    const b = e.target.closest('[data-tog]');
+    if (!b) return;
+    toggle(b.dataset.tog);
+    saveTeam();
+    $('#togList').innerHTML = html();
+    filter();
+  };
+}
+
+function openMomentSongPicker(m) {
+  openToggleList(`Songs in ${m.name}`,
+    () => [...library.songs].sort((a, b) => a.title.localeCompare(b.title)).map(s => ({ id: s.id, name: Model.songLabel(s), sub: s.stop != null ? clipText(s) : '' })),
+    id => m.songIds.includes(id),
+    id => { m.songIds = m.songIds.includes(id) ? m.songIds.filter(x => x !== id) : [...m.songIds, id]; });
+}
+
+function openSongMomentPicker(s) {
+  openToggleList(`Moments with ${s.title}`,
+    () => team.moments.map(m => ({ id: m.id, name: m.name, sub: m.section === 'breaks' ? 'Warmups & breaks' : 'Key moments' })),
+    id => Model.findMoment(team, id).songIds.includes(s.id),
+    id => { const m = Model.findMoment(team, id); m.songIds = m.songIds.includes(s.id) ? m.songIds.filter(x => x !== s.id) : [...m.songIds, s.id]; });
+}
+
+/* ==================================================================== 11. LOCK */
+
+function applyLock() {
+  document.body.classList.toggle('locked', !!settings.locked);
+  const btn = $('#lockBtn');
+  btn.setAttribute('aria-pressed', String(!!settings.locked));
+  btn.querySelector('span').textContent = settings.locked ? 'Hold to unlock' : 'Lock';
+  btn.setAttribute('aria-label', settings.locked ? 'Locked. Press and hold to unlock.' : 'Lock the setup screens');
+}
+
+function setLocked(on) {
+  settings.locked = on;
+  saveSettings();
+  if (on) { closeDialog(); if (SETUP_VIEWS.includes(ui.view)) ui.view = 'game'; }
+  applyLock();
+  render();
+  toast(on ? 'Locked. Game and Lineup stay open. Press and hold the lock for a second and a half to unlock.' : 'Unlocked.');
+}
+
+(() => {
+  const btn = $('#lockBtn');
+  let hold = null;
+  btn.addEventListener('click', () => {
+    if (btn.dataset.justUnlocked) { delete btn.dataset.justUnlocked; return; } // the end of the hold, not a new tap
+    if (!settings.locked) setLocked(true);
+    else toast('Press and hold the lock for a second and a half to unlock.');
+  });
+  btn.addEventListener('pointerdown', () => {
+    if (!settings.locked) return;
+    btn.classList.add('holding');
+    hold = setTimeout(() => { btn.classList.remove('holding'); btn.dataset.justUnlocked = '1'; setLocked(false); }, 1500);
+  });
+  const cancel = () => { clearTimeout(hold); btn.classList.remove('holding'); };
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointerleave', cancel);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+})();
 
 /* ==================================================================== 9. EVENTS AND STARTUP */
 
@@ -732,7 +953,8 @@ function render() {
   }
   $('#teamName').textContent = team.name || 'Diamond DJ';
   if (ui.view !== 'songs') { Sound.stopPreview(); edit.songId = null; }
-  ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs })[ui.view]();
+  if (settings.locked && SETUP_VIEWS.includes(ui.view)) ui.view = 'game';
+  ({ game: renderGame, lineup: renderLineup, roster: renderRoster, songs: renderSongs, moments: renderMoments })[ui.view]();
 }
 
 function go(view) {
@@ -781,6 +1003,56 @@ async function onAction(e) {
     case 'batter': if (press && press.fired && press.id === id) { press = null; return; } return playBatter(id);
     case 'top': game.upNext = lineup().order[0] || null; saveGame(); return render();
     case 'edit-order': return openOrderDialog();
+    case 'new-game': if (!armed(b, 'Tap again: new game')) return; newGame(); return render();
+    case 'game-tab': ui.gameTab = b.dataset.tab; return render();
+    case 'moment': return playMoment(Model.findMoment(team, id));
+    /* moments screen */
+    case 'pick-moment': ui.momentId = id; return render();
+    case 'm-new': {
+      const name = await askText('New moment or playlist', 'Button name', '', 'Create');
+      if (!name) return;
+      const m = Model.newMoment({ name });
+      team.moments.push(m); ui.momentId = m.id; saveTeam(); return render();
+    }
+    case 'm-color': case 'm-section': case 'm-mode': {
+      const m = Model.findMoment(team, ui.momentId);
+      m[{ 'm-color': 'color', 'm-section': 'section', 'm-mode': 'mode' }[act]] = b.dataset.v;
+      if (act === 'm-section') { team.moments = team.moments.filter(x => x !== m).concat(m); } // goes to the end of its new section
+      saveTeam(); return render();
+    }
+    case 'm-move': {
+      const m = Model.findMoment(team, ui.momentId);
+      const same = team.moments.filter(x => x.section === m.section);
+      const other = same[same.indexOf(m) + Number(b.dataset.d)];
+      if (!other) return;
+      const i = team.moments.indexOf(m), j = team.moments.indexOf(other);
+      [team.moments[i], team.moments[j]] = [team.moments[j], team.moments[i]];
+      saveTeam(); return render();
+    }
+    case 'm-delete': {
+      if (!armed(b, 'Tap again to delete this moment')) return;
+      team.moments = team.moments.filter(x => x.id !== ui.momentId);
+      ui.momentId = null; saveTeam(); return render();
+    }
+    case 'm-add-songs': return openMomentSongPicker(Model.findMoment(team, ui.momentId));
+    case 'm-song-remove': case 'm-song-up': case 'm-song-down': {
+      const m = Model.findMoment(team, ui.momentId);
+      const i = m.songIds.indexOf(id);
+      if (act === 'm-song-remove') m.songIds.splice(i, 1);
+      else {
+        const j = i + (act === 'm-song-up' ? -1 : 1);
+        if (j < 0 || j >= m.songIds.length) return;
+        [m.songIds[i], m.songIds[j]] = [m.songIds[j], m.songIds[i]];
+      }
+      saveTeam(); return render();
+    }
+    case 'm-listen': {
+      const x = song(id), c = Model.clipOf(x);
+      return Sound.playOne({ path: c.path, start: c.start, stop: c.stop, fadeOut: c.fadeOut, level: c.volume, label: `Listen · ${x.title}`, kind: 'sound' })
+        .catch(() => toast('That song’s file isn’t on this device.'));
+    }
+    case 'sm-add': return openSongMomentPicker(s);
+    case 'sm-remove': { const m = Model.findMoment(team, id); m.songIds = m.songIds.filter(x => x !== s.id); saveTeam(); return render(); }
     case 'go': return go(b.dataset.view);
     case 'load-demo': return loadDemo();
     /* lineups */
@@ -858,7 +1130,7 @@ async function onAction(e) {
     case 'song-delete': {
       const users = Model.songsUsing(team, s.id);
       if (!armed(b, users.length ? `Tap again: also removes it from ${users.length} player${users.length > 1 ? 's' : ''}` : 'Tap again to delete')) return;
-      for (const u of users) u.songId = null;
+      Model.removeSongEverywhere(team, s.id);
       library.songs = library.songs.filter(x => x.id !== s.id);
       delete peaksCache[s.id]; Store.remove('peaks:' + s.id).catch(() => {});
       saveLibrary(); saveTeam();
@@ -907,11 +1179,17 @@ main.addEventListener('input', e => {
     const item = document.querySelector(`#songList [data-id="${CSS.escape(s.id)}"] .name`);
     if (item) item.textContent = Model.songLabel(s);
   }
+  if (t.dataset.mf === 'name') {
+    const m = Model.findMoment(team, ui.momentId); m.name = t.value; saveTeam();
+    const item = document.querySelector(`[data-act="pick-moment"][data-id="${CSS.escape(m.id)}"] .name`);
+    if (item) item.textContent = m.name;
+  }
 });
 
 main.addEventListener('change', async e => {
   const t = e.target;
   if (t.id === 'gameLineup') { game.lineupId = t.value; game.upNext = null; saveGame(); return render(); }
+  if (t.dataset.mf === 'skipPlayed') { Model.findMoment(team, ui.momentId).skipPlayed = t.checked; saveTeam(); return; }
   if (t.dataset.pf === 'active') {
     const p = player(ui.playerId); p.active = t.checked; Model.syncLineups(team); saveTeam(); return render();
   }
@@ -994,6 +1272,7 @@ async function start() {
   try {
     const [t, lib, g, st, paths] = await Promise.all([Store.get('team'), Store.get('library'), Store.get('game'), Store.get('settings'), Store.audio.paths()]);
     team = t ? Model.checkTeam(t) : Model.newTeam('U13 Burlington Bees', 'U13 Bees');
+    if (t && t.version !== team.version) saveTeam(); // keep a Phase 1 team's new pre-made moments
     library = lib ? Model.checkLibrary(lib) : Model.newLibrary();
     if (g) game = { ...game, ...g };
     settings = { ...DEFAULTS, ...(st || {}) };
@@ -1008,6 +1287,7 @@ async function start() {
   Sound.settings.fadeSeconds = settings.fadeSeconds;
   Sound.setMaster(settings.masterVolume);
   $('#master').value = settings.masterVolume;
+  applyLock();
   render();
   renderDock();
   keepAwake();

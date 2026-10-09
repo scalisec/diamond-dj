@@ -54,7 +54,7 @@ with sync_playwright() as p:
 
     # long press makes a batter up next
     row = page.locator('[data-act="batter"][data-id="demo_p6"]')
-    bx = row.bounding_box()
+    row.scroll_into_view_if_needed(); bx = row.bounding_box()
     page.mouse.move(bx['x'] + 40, bx['y'] + 20); page.mouse.down(); time.sleep(0.9); page.mouse.up()
     time.sleep(0.3)
     check('long press sets Lily up next without playing', 'Lily Okafor' in page.inner_text('.upnext') and page.evaluate("Sound.tracks.length") == 0)
@@ -108,11 +108,88 @@ with sync_playwright() as p:
     check('Hear the clip plays from the start point', page.evaluate("Sound.tracks.some(t => t.kind === 'preview' && t.time >= 18.5)"))
     page.screenshot(path=f'{OUT}/songs.png')
 
+    # ---------------------------------------------------------------- Phase 2: key moments
+    page.click('#stopAll')
+    page.click('.tabs [data-view="game"]')
+    page.wait_for_selector('.pad')
+    check('game shows 8 key moments and 4 breaks', page.locator('.pad').count() == 12)
+    page.click('.pad[data-id="demo_m1"]'); time.sleep(0.8)
+    check('Home Run plays', page.evaluate("Sound.tracks.some(t => t.momentId === 'demo_m1' && t.state === 'playing')"))
+    check('the Home Run pad shows it is playing', 'on' in page.get_attribute('.pad[data-id="demo_m1"]', 'class'))
+    page.click('.pad[data-id="demo_m7"]'); time.sleep(0.6)
+    check('Foul Ball (2 s clip) plays over the music, Home Run keeps going',
+          page.evaluate("Sound.tracks.some(t => t.momentId === 'demo_m7') && Sound.tracks.some(t => t.momentId === 'demo_m1' && t.state === 'playing')"))
+    page.click('.pad[data-id="demo_m1"]'); time.sleep(0.3)
+    check('second tap fades Home Run', page.evaluate("Sound.tracks.filter(t => t.momentId === 'demo_m1').every(t => t.state === 'fading' || t.state === 'done')"))
+    page.click('.pad[data-id="demo_m1"]'); time.sleep(0.6)
+    played = page.evaluate("game.played")
+    check(f'random skips the song already played ({played})', len(set(played) & {'demo_s1', 'demo_s2'}) == 2)
+    page.click('.pad[data-id="demo_m9"]'); time.sleep(0.8)
+    first = page.evaluate("Sound.tracks.find(t => t.kind === 'playlist' && t.state === 'playing').label")
+    check('Pitcher Warmup playlist starts (and fades Home Run)', first.startswith('Pitcher Warmup') and
+          page.evaluate("Sound.tracks.filter(t => t.momentId === 'demo_m1').every(t => t.state !== 'playing')"))
+    page.click('.pad[data-id="demo_m9"]'); time.sleep(0.8)
+    second = page.evaluate("Sound.tracks.find(t => t.kind === 'playlist' && t.state === 'playing').label")
+    check(f'second tap skips to the next song ({first} -> {second})', first != second)
+    page.screenshot(path=f'{OUT}/game-moments.png')
+    page.click('.pad[data-id="demo_m4"]')
+    check('an empty moment explains itself', 'no songs yet' in page.inner_text('#toast').lower())
+    page.click('#fadeAll'); time.sleep(3)
+    check('Fade out stops the playlist', page.evaluate("Sound.tracks.length") == 0)
+    page.click('[data-act="new-game"]'); page.click('[data-act="new-game"]')
+    check('New game clears the played songs', page.evaluate("game.played.length") == 0)
+
+    # Moments screen
+    page.click('.tabs [data-view="moments"]')
+    page.click('[data-act="pick-moment"][data-id="demo_m4"]')
+    page.click('[data-act="m-add-songs"]')
+    page.click('#togList [data-tog="demo_s2"]'); page.click('#togList [data-tog="demo_s4"]')
+    page.click('#dlgClose')
+    check('songs added to Walk', page.evaluate("Model.findMoment(team, 'demo_m4').songIds") == ['demo_s2', 'demo_s4'])
+    page.click('[data-act="m-mode"][data-v="order"]')
+    page.click('[data-act="m-song-down"][data-id="demo_s2"]')
+    check('reorder songs in an in-order moment', page.evaluate("Model.findMoment(team, 'demo_m4').songIds") == ['demo_s4', 'demo_s2'])
+    page.fill('[data-mf="name"]', 'Ball Four')
+    page.click('[data-act="m-color"][data-v="gold"]')
+    check('rename and recolour', page.evaluate("[Model.findMoment(team, 'demo_m4').name, Model.findMoment(team, 'demo_m4').color].join()") == 'Ball Four,gold')
+    page.click('[data-act="m-move"][data-d="-1"]')
+    check('move a moment earlier', page.evaluate("team.moments.findIndex(m => m.id === 'demo_m4')") == 2)
+    page.screenshot(path=f'{OUT}/moments.png')
+    page.click('[data-act="m-new"]'); page.fill('#askInput', 'Pitching Change'); page.click('#askOk')
+    page.wait_for_selector('[data-mf="name"][value="Pitching Change"]')
+    check('create a moment', page.evaluate("team.moments.some(m => m.name === 'Pitching Change')"))
+    page.click('[data-act="m-delete"]'); page.click('[data-act="m-delete"]')
+    check('delete a moment (tap twice)', not page.evaluate("team.moments.some(m => m.name === 'Pitching Change')"))
+
+    # Songs editor: moments chips
+    page.click('.tabs [data-view="songs"]')
+    page.click('[data-act="pick-song"][data-id="demo_s3"]')
+    page.click('[data-act="sm-add"]'); page.click('#togList [data-tog="demo_m8"]'); page.click('#dlgClose')
+    check('add a song to a moment from Songs', 'demo_s3' in page.evaluate("Model.findMoment(team, 'demo_m8').songIds"))
+    page.click('[data-act="sm-remove"][data-id="demo_m8"]')
+    check('remove it again with the chip', 'demo_s3' not in page.evaluate("Model.findMoment(team, 'demo_m8').songIds"))
+
+    # Lock
+    page.click('#lockBtn')
+    check('Lock goes to Game and hides setup and settings',
+          page.evaluate("ui.view") == 'game' and not page.is_visible('.setup-group') and not page.is_visible('#settingsBtn') and page.is_visible('[data-view="lineup"]'))
+    page.click('.tabs [data-view="lineup"]')
+    check('Lineup still works when locked', page.evaluate("ui.view") == 'lineup')
+    page.click('#lockBtn'); time.sleep(0.3)
+    check('a quick tap does not unlock', page.evaluate("settings.locked") is True)
+    lb = page.locator('#lockBtn').bounding_box()
+    page.mouse.move(lb['x'] + 10, lb['y'] + 10); page.mouse.down(); time.sleep(1.7); page.mouse.up()
+    check('press and hold unlocks', page.evaluate("settings.locked") is False and page.is_visible('.setup-group'))
+    page.click('#lockBtn')  # leave it locked to check it survives a reload
+
     # reload: everything persisted
     time.sleep(0.6)
     page.reload(); page.wait_for_selector('.upnext')
     check('lineup choice and players survive a reload',
           page.evaluate("Model.findLineup(team, game.lineupId).name") == 'Doubleheader' and page.evaluate("team.players.length") == 11)
+    check('lock and moment edits survive a reload',
+          page.evaluate("settings.locked") is True and page.evaluate("Model.findMoment(team, 'demo_m4').name") == 'Ball Four')
+    page.screenshot(path=f'{OUT}/game-locked.png')
 
     # phone
     ph = ctx.new_page(); ph.set_viewport_size({'width': 390, 'height': 844})
@@ -120,6 +197,10 @@ with sync_playwright() as p:
     ph.goto(f'http://127.0.0.1:{port}/index.html'); ph.wait_for_selector('.upnext')
     check('phone: no sideways scrolling', ph.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
     ph.screenshot(path=f'{OUT}/game-phone.png', full_page=True)
+    check('phone: only the Walkups tab shows at first', ph.is_visible('.upnext') and not ph.is_visible('.pad'))
+    ph.click('.phone-tabs [data-tab="moments"]')
+    check('phone: Moments tab shows the pads', ph.is_visible('.pad[data-id="demo_m1"]') and not ph.is_visible('.upnext'))
+    ph.screenshot(path=f'{OUT}/moments-phone.png')
     b.close()
 
 print('\nconsole/page errors:', errors or 'none')

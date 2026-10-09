@@ -24,9 +24,84 @@
   /* ------------------------------------------------------------ teams and players */
 
   function newTeam(name, short) {
-    const team = { format: FORMAT_TEAM, version: 1, id: uid('t'), name, short: short || name, players: [], lineups: [], moments: [] };
+    const team = { format: FORMAT_TEAM, version: 2, id: uid('t'), name, short: short || name, players: [], lineups: [], moments: defaultMoments() };
     team.lineups.push(newLineup('Default'));
     return team;
+  }
+
+  /* ------------------------------------------------------------ key moments and breaks */
+
+  const COLORS = ['navy', 'blue', 'gold', 'light'];
+
+  function newMoment(fields = {}) {
+    return {
+      id: fields.id || uid('m'),
+      name: String(fields.name || 'New moment'),
+      color: COLORS.includes(fields.color) ? fields.color : 'blue',
+      section: fields.section === 'breaks' ? 'breaks' : 'moments',
+      mode: ['random', 'order', 'playlist'].includes(fields.mode) ? fields.mode : 'random',
+      skipPlayed: fields.skipPlayed !== false,
+      songIds: Array.isArray(fields.songIds) ? fields.songIds.map(String) : [],
+    };
+  }
+
+  // the moments from the mockups: made empty, the organizer adds songs
+  function defaultMoments() {
+    return [
+      ['Home Run', 'navy'], ['Strikeout', 'blue'], ['Great Play', 'blue'], ['Walk', 'light'],
+      ['Rally Time', 'gold', 'order'], ['Double Play', 'blue'], ['Foul Ball', 'light'], ['We Win!', 'navy'],
+    ].map(([name, color, mode]) => newMoment({ name, color, mode }))
+      .concat([
+        ['Pitcher Warmup', 'playlist'], ['Between Innings', 'playlist'], ['Pregame', 'playlist'], ['O Canada', 'order'],
+      ].map(([name, mode]) => newMoment({ name, mode, section: 'breaks', color: 'light', skipPlayed: mode !== 'order' })));
+  }
+
+  function findMoment(team, id) { return team.moments.find(m => m.id === id) || null; }
+
+  function removeSongEverywhere(team, songId) {
+    for (const p of team.players) if (p.songId === songId) p.songId = null;
+    for (const m of team.moments) m.songIds = m.songIds.filter(id => id !== songId);
+  }
+
+  function momentsWithSong(team, songId) { return team.moments.filter(m => m.songIds.includes(songId)); }
+
+  /* Which song a tap on a moment plays.
+     state: { played: [songId], cursors: { momentId: index } } (kept on the device, cleared by New game)
+     rand: a function returning 0..1 (Math.random; tests pass their own)
+     Returns { songId, index } or null when the moment has no songs. */
+  function pickSong(moment, library, state, rand = Math.random) {
+    const ids = moment.songIds.filter(id => findSong(library, id));
+    if (!ids.length) return null;
+    if (moment.mode === 'random') {
+      const played = new Set(state.played || []);
+      let pool = moment.skipPlayed ? ids.filter(id => !played.has(id)) : ids;
+      if (!pool.length) pool = ids; // everything played: start over
+      const songId = pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))];
+      return { songId, index: ids.indexOf(songId) };
+    }
+    // in order, and playlists: carry on from where this moment got to
+    const at = (state.cursors && state.cursors[moment.id]) || 0;
+    const index = at % ids.length;
+    return { songId: ids[index], index };
+  }
+
+  /* Record that a moment played a song: marks it played and moves the moment's place on. */
+  function notePlayed(moment, library, state, songId) {
+    state.played = state.played || [];
+    if (!state.played.includes(songId)) state.played.push(songId);
+    const ids = moment.songIds.filter(id => findSong(library, id));
+    state.cursors = state.cursors || {};
+    state.cursors[moment.id] = (ids.indexOf(songId) + 1) % Math.max(1, ids.length);
+    return state;
+  }
+
+  /* The playback window for a song in a moment: its start point to its stop point,
+     or to the end of the song when it has no stop point. */
+  function clipOf(song) {
+    const start = Math.max(0, song.start || 0);
+    const stop = song.stop != null && song.stop > start ? song.stop : null;
+    const end = stop ?? (song.length || null);
+    return { path: song.path, start, stop, fadeOut: song.fadeOut ?? 2, volume: song.volume ?? 1, length: end != null ? end - start : null };
   }
 
   function newPlayer(fields = {}) {
@@ -272,7 +347,9 @@
     if (!obj || obj.format !== FORMAT_TEAM || !Array.isArray(obj.players) || !Array.isArray(obj.lineups)) {
       throw new Error('This isn’t a Diamond DJ team file.');
     }
-    obj.moments = Array.isArray(obj.moments) ? obj.moments : [];
+    obj.moments = Array.isArray(obj.moments) ? obj.moments.map(newMoment) : [];
+    // teams from version 1 (Phase 1) had no moments yet: give them the pre-made ones once
+    if (!(obj.version >= 2)) { if (!obj.moments.length) obj.moments = defaultMoments(); obj.version = 2; }
     obj.players = obj.players.map(p => ({ ...newPlayer(p), id: String(p.id || uid('p')) }));
     obj.lineups = obj.lineups.map(l => ({
       id: String(l.id || uid('l')), name: String(l.name || 'Lineup'),
@@ -299,6 +376,7 @@
     upNextId, nextAfter, comingUp, battingSlot,
     newLibrary, findSong, songFromFile, songLabel, songsUsing,
     walkupPlan, checkTeam, checkLibrary,
+    COLORS, newMoment, defaultMoments, findMoment, removeSongEverywhere, momentsWithSong, pickSong, notePlayed, clipOf,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Model = api;

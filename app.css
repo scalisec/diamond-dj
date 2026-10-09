@@ -151,6 +151,47 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .order .item.playing { background: var(--gold-soft); border-color: var(--gold); }
 .order .item.benched { opacity: .5; }
 
+/* ------------------------------------------------------------ key moments */
+.game-cols { grid-template-columns: 400px minmax(0, 1fr); }
+.phone-tabs { display: none; }
+.pads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.pad {
+  min-height: 100px; border: 0; border-radius: 14px; padding: 12px 14px; text-align: left;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 8px;
+}
+.pad-name { font-family: var(--cond); font-weight: 700; font-size: 25px; line-height: 1.02; }
+.pad-meta { font-size: 13px; font-weight: 600; opacity: .9; }
+.pad-break { min-height: 88px; background: var(--card); color: var(--navy); border: 2px solid var(--blue); }
+.pad-break .pad-name { font-size: 22px; }
+.pad.on { outline: 4px solid var(--gold); outline-offset: 2px; }
+.pad.c-gold.on, .pad-break.on { outline-color: var(--navy); }
+.pad.on .pad-meta { opacity: 1; font-weight: 700; }
+.pad.empty-pad { opacity: .55; }
+.c-navy { background: var(--navy); color: var(--gold); }
+.c-blue { background: var(--blue); color: #fff; }
+.c-gold { background: var(--gold); color: var(--navy); }
+.c-light { background: var(--blue-soft); color: var(--navy); }
+.swatch { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line-strong); }
+.swatch-btn { width: 50px; height: 46px; border-radius: 10px; border: 1px solid var(--line-strong); }
+.swatch-btn[aria-pressed="true"] { outline: 3px solid var(--gold); outline-offset: 2px; }
+.chip.on { background: var(--navy); color: var(--gold); border-color: var(--navy); }
+.chip.add { border: 1px dashed var(--blue); color: var(--blue); }
+.tick { flex: none; width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--line-strong); display: grid; place-items: center; font-weight: 700; color: #fff; }
+[aria-pressed="true"] > .tick { background: var(--blue); border-color: var(--blue); }
+
+/* ------------------------------------------------------------ lock */
+.lock-btn {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 16px;
+  border: 0; border-radius: 10px; background: var(--gold); color: var(--navy); font-weight: 700; white-space: nowrap;
+  user-select: none; -webkit-user-select: none; touch-action: none;
+}
+.lock-btn svg { width: 18px; height: 18px; stroke-width: 2.3; position: relative; }
+.lock-btn span { position: relative; }
+.lock-btn::before { content: ''; position: absolute; inset: 0; width: 0; background: rgba(255, 255, 255, .55); }
+.lock-btn.holding::before { width: 100%; transition: width 1.5s linear; }
+body.locked .lock-btn { background: var(--navy-2); color: var(--gold); border: 1px solid var(--navy-line); }
+body.locked .setup-group, body.locked .divider, body.locked #settingsBtn { display: none; }
+
 /* ------------------------------------------------------------ lineup editor */
 .edit-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .edit-row.dragging { border: 2px solid var(--blue); box-shadow: 0 6px 18px rgba(11, 36, 71, .18); position: relative; z-index: 2; }
@@ -158,6 +199,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .handle { flex: none; width: 40px; height: 44px; display: grid; place-items: center; color: #8090AA; touch-action: none; cursor: grab; border: 0; background: none; }
 .handle svg { width: 22px; height: 22px; }
 .edit-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.edit-row .name { font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edit-row .sub { font-size: 13px; color: var(--muted); }
+.item > .sub { flex: none; overflow: visible; }
 .bench { padding: 14px; border-radius: var(--r); border: 2px dashed var(--line-strong); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .chip { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-weight: 600; }
 .pill { padding: 4px 10px; border-radius: 999px; background: var(--gold); color: var(--navy); font-size: 13px; font-weight: 700; }
@@ -213,8 +257,12 @@ dialog::backdrop { background: rgba(11, 36, 71, .55); }
 .pick-list { max-height: 50vh; overflow: auto; }
 
 /* ------------------------------------------------------------ phones and narrow tablets */
+@media (max-width: 1100px) {
+  .pads { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 900px) {
-  .cols, .cols.wide-left { grid-template-columns: minmax(0, 1fr); }
+  .cols, .cols.wide-left, .game-cols { grid-template-columns: minmax(0, 1fr); }
+  .pads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .team-name { display: none; }
   .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -234,4 +282,16 @@ dialog::backdrop { background: rgba(11, 36, 71, .55); }
   .dock .btn.stop { flex: 1; min-height: 54px; }
   .upnext .player { font-size: 27px; }
   .play-walkup { min-height: 64px; font-size: 21px; }
+  /* the Game screen becomes three tabs: Walkups, Moments, Breaks */
+  .phone-tabs { display: flex; margin-bottom: 12px; }
+  .phone-tabs button { flex: 1; }
+  .game-wrap [data-gtab] { display: none; }
+  .game-wrap[data-tab="walkups"] [data-gtab="walkups"],
+  .game-wrap[data-tab="moments"] [data-gtab="moments"],
+  .game-wrap[data-tab="breaks"] [data-gtab="breaks"] { display: flex; }
+  .lock-btn { padding: 0 10px; min-height: 44px; }
+  .lock-btn span { display: none; }
+  body.locked .lock-btn span { display: inline; font-size: 13px; }
+  .pad { min-height: 92px; }
+  .pad-name { font-size: 23px; }
 }

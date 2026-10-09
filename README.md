@@ -6,7 +6,7 @@ screen, and plays everything from the device, so no wifi is needed at the field.
 
 First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai project "Diamond DJ".
 
-## Phase 1 (this version)
+## What it does (version 0.2, Phases 1 and 2)
 
 - **Game**: big "Up next" card with **Play walkup** (announcement, then the song) and **Skip**;
   the batting order auto-advances and wraps. Tap any batter to play them; press and hold to make
@@ -19,10 +19,20 @@ First team: U13 Burlington Bees. Design spec and mockups live in the claude.ai p
   Set stop here / Hear the clip, exact seconds, fade and volume.
 - **Settings** (gear): fade length, walk-up length, song volume under the announcement, New game,
   backup file (roster, lineups, cut points; not the music), demo team.
+- **Key moments and breaks** on the Game screen: tap to play, tap again to fade. Each plays a random
+  song (skipping ones already played this game), the next song in order, or a playlist that keeps
+  going with overlapping songs (a second tap skips). Clips under 5 s, like a foul-ball horn, play
+  over the music. New teams start with Home Run, Strikeout, Great Play, Walk, Rally Time, Double
+  Play, Foul Ball, We Win!, Pitcher Warmup, Between Innings, Pregame and O Canada, all empty.
+- **Moments** screen: create, rename, recolour, reorder and delete moments; pick songs from the
+  library and their order. Songs can also be added to moments from the Songs screen.
+- **Lock**: hides Roster, Songs, Moments and Settings; Game and Lineup stay open. Press and hold
+  1.5 s to unlock.
+- **New game** (tap twice): back to batter 1, and every song can play again.
+- Phones: the Game screen splits into Walkups, Moments and Breaks tabs.
 - Offline install (service worker), screen kept awake during play where supported.
 
-Coming next: Key Moments and warmup playlists, phone tabs, Lock (Phase 2); Google Drive sync and
-publishing (Phase 3).
+Coming next: Google Drive sync and publishing for several teams (Phase 3).
 
 ## Try it
 

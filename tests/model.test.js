@@ -167,3 +167,73 @@ test('team files are checked and repaired on open', () => {
   assert.ok(!back.lineups[0].order.includes('ghost'));
   assert.equal(back.players.length, 2);
 });
+
+/* ---------------------------------------------------------------- Phase 2: moments */
+
+function libWith(n) {
+  const lib = M.newLibrary();
+  for (let i = 1; i <= n; i++) { const s = M.songFromFile(`Songs/S${i}.mp3`); s.id = `s${i}`; lib.songs.push(s); }
+  return lib;
+}
+
+test('a new team starts with the pre-made moments and breaks, all empty', () => {
+  const t = M.newTeam('Bees');
+  assert.deepEqual(t.moments.filter(m => m.section === 'moments').map(m => m.name),
+    ['Home Run', 'Strikeout', 'Great Play', 'Walk', 'Rally Time', 'Double Play', 'Foul Ball', 'We Win!']);
+  assert.deepEqual(t.moments.filter(m => m.section === 'breaks').map(m => m.name), ['Pitcher Warmup', 'Between Innings', 'Pregame', 'O Canada']);
+  assert.ok(t.moments.every(m => m.songIds.length === 0));
+  assert.equal(M.findMoment(t, t.moments[0].id).name, 'Home Run');
+});
+
+test('a Phase 1 team gets the pre-made moments once; a team that deleted them all stays empty', () => {
+  const old = JSON.parse(JSON.stringify(teamWith(2)));
+  old.version = 1; old.moments = [];
+  assert.equal(M.checkTeam(old).moments.length, 12);
+  const cleared = JSON.parse(JSON.stringify(teamWith(2)));
+  cleared.moments = [];
+  assert.equal(M.checkTeam(cleared).moments.length, 0);
+});
+
+test('random picks skip songs already played this game, then start over', () => {
+  const lib = libWith(3);
+  const m = M.newMoment({ songIds: ['s1', 's2', 's3'] });
+  const state = { played: ['s1', 's2'], cursors: {} };
+  assert.equal(M.pickSong(m, lib, state, () => 0).songId, 's3');
+  state.played.push('s3');
+  assert.equal(M.pickSong(m, lib, state, () => 0).songId, 's1', 'all played: back to the full list');
+  m.skipPlayed = false;
+  assert.equal(M.pickSong(m, lib, { played: ['s1'] }, () => 0).songId, 's1');
+});
+
+test('in order and playlists carry on from where they got to, and wrap', () => {
+  const lib = libWith(3);
+  const m = M.newMoment({ mode: 'order', songIds: ['s1', 's2', 's3'] });
+  const state = { played: [], cursors: {} };
+  const order = [];
+  for (let i = 0; i < 4; i++) { const pick = M.pickSong(m, lib, state); order.push(pick.songId); M.notePlayed(m, lib, state, pick.songId); }
+  assert.deepEqual(order, ['s1', 's2', 's3', 's1']);
+  assert.deepEqual(state.played, ['s1', 's2', 's3']);
+});
+
+test('moments ignore songs that were deleted; an empty moment picks nothing', () => {
+  const lib = libWith(1);
+  assert.equal(M.pickSong(M.newMoment({ songIds: ['gone'] }), lib, {}), null);
+  assert.equal(M.pickSong(M.newMoment({ songIds: ['gone', 's1'] }), lib, {}, () => 0.99).songId, 's1');
+});
+
+test('deleting a song removes it from players and moments', () => {
+  const t = teamWith(1);
+  t.players[0].songId = 's1';
+  t.moments[0].songIds = ['s1', 's2'];
+  assert.equal(M.momentsWithSong(t, 's1').length, 1);
+  M.removeSongEverywhere(t, 's1');
+  assert.equal(t.players[0].songId, null);
+  assert.deepEqual(t.moments[0].songIds, ['s2']);
+});
+
+test('a moment plays its clip: start to stop, or to the end of the song', () => {
+  const s = M.songFromFile('Songs/A.mp3'); s.start = 10; s.length = 200;
+  assert.deepEqual([M.clipOf(s).stop, M.clipOf(s).length], [null, 190]);
+  s.stop = 25;
+  assert.deepEqual([M.clipOf(s).stop, M.clipOf(s).length], [25, 15]);
+});
