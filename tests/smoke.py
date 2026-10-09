@@ -198,6 +198,12 @@ with sync_playwright() as p:
     check('phone: no sideways scrolling', ph.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"))
     ph.screenshot(path=f'{OUT}/game-phone.png', full_page=True)
     check('phone: only the Walkups tab shows at first', ph.is_visible('.upnext') and not ph.is_visible('.pad'))
+    ph.evaluate("setLocked(false)")
+    for v in ['lineup', 'roster', 'songs', 'moments']:
+        ph.click(f'.tabs [data-view="{v}"]'); time.sleep(0.4)
+        widths = ph.evaluate("[...document.querySelectorAll('#main > .cols > *')].map(e => Math.round(e.getBoundingClientRect().width))")
+        check(f'phone: {v} stacks into one full-width column {widths}', len(widths) >= 2 and all(w >= 340 for w in widths))
+    ph.click('.tabs [data-view="game"]')
     ph.click('.phone-tabs [data-tab="moments"]')
     check('phone: Moments tab shows the pads', ph.is_visible('.pad[data-id="demo_m1"]') and not ph.is_visible('.upnext'))
     ph.screenshot(path=f'{OUT}/moments-phone.png')

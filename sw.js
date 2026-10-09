@@ -4,7 +4,7 @@
      instead of GitHub) skips the update and the current version keeps working.
    - The app always opens from the saved copy, so weak wifi can't hold it up.
    Bump VERSION whenever app files change. */
-const VERSION = 'diamond-v6';
+const VERSION = 'diamond-v7';
 const SHELL = ['./', 'index.html', 'app.css', 'version.js', 'manifest.webmanifest',
   'js/model.js', 'js/store.js', 'js/audio.js', 'js/drive.js', 'js/app.js',
   'icons/logo.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',

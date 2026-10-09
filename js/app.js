@@ -295,7 +295,7 @@ function renderLineup() {
   const list = team.lineups.map(x => `<button class="item ${x.id === l.id ? 'sel' : ''}" data-act="lu-pick" data-id="${esc(x.id)}">
       <span class="grow"><span class="name">${esc(x.name)}</span><span class="sub">${x.order.length} batting${x.bench.length ? ` · ${x.bench.length} bench` : ''}</span></span>
       ${x.id === game.lineupId ? '<span class="pill">In use</span>' : ''}</button>`).join('');
-  main.innerHTML = `<div class="cols" style="grid-template-columns:280px minmax(0,1fr)">
+  main.innerHTML = `<div class="cols lineup-cols">
     <aside class="stack">
       <span class="section-title">Saved lineups</span>
       <div class="list">${list}</div>
@@ -389,7 +389,7 @@ function renderRoster() {
     editor = `<section class="panel stack" style="gap:18px">
       <div class="player-head"><div class="big-num" id="phNum">${esc(p.number || '–')}</div><h2 id="phName">${esc(Model.playerName(p))}</h2>
         <span class="spacer"></span><button class="btn primary big" data-act="test-walkup" ${p.intro || s ? '' : 'disabled'}>${PLAY_ICON}Test walkup</button></div>
-      <div class="grid2" style="grid-template-columns:2fr 2fr 1fr">
+      <div class="grid2 name-fields">
         <label class="field">First name<input type="text" data-pf="first" value="${esc(p.first)}" autocomplete="off"></label>
         <label class="field">Last name<input type="text" data-pf="last" value="${esc(p.last)}" autocomplete="off"></label>
         <label class="field">Number<input type="text" inputmode="numeric" data-pf="number" value="${esc(p.number)}" autocomplete="off" maxlength="3"></label>
@@ -424,7 +424,7 @@ function renderRoster() {
         <span class="spacer"></span><button class="btn danger" data-act="player-remove">Remove from team</button></div>
     </section>`;
   }
-  main.innerHTML = `<div class="cols" style="grid-template-columns:340px minmax(0,1fr)">
+  main.innerHTML = `<div class="cols roster-cols">
     <aside class="stack"><span class="section-title">Roster · ${team.players.length}</span>
       <div class="list" id="rosterList">${rosterList()}</div>
       <button class="btn outline big" data-act="player-add">+ Add player</button></aside>
@@ -872,7 +872,7 @@ function renderMoments() {
     const pos = sameSection.indexOf(m);
     const swatches = Model.COLORS.map(c => `<button class="swatch-btn c-${c}" data-act="m-color" data-v="${c}" aria-pressed="${m.color === c}" aria-label="${c}"></button>`).join('');
     editor = `<section class="panel stack" style="gap:16px">
-      <div class="grid2" style="grid-template-columns:2fr 1fr">
+      <div class="grid2 moment-fields">
         <label class="field">Button name<input type="text" data-mf="name" value="${esc(m.name)}" autocomplete="off"></label>
         ${m.section === 'moments' ? `<div class="field">Button colour<div class="row">${swatches}</div></div>` : '<div></div>'}
       </div>

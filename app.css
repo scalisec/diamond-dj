@@ -83,6 +83,10 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .main { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; }
 .cols { display: grid; gap: 20px; grid-template-columns: 380px minmax(0, 1fr); align-items: start; }
 .cols.wide-left { grid-template-columns: 420px minmax(0, 1fr); }
+.cols.lineup-cols { grid-template-columns: 280px minmax(0, 1fr); }
+.cols.roster-cols { grid-template-columns: 340px minmax(0, 1fr); }
+.grid2.name-fields { grid-template-columns: 2fr 2fr 1fr; }
+.grid2.moment-fields { grid-template-columns: 2fr 1fr; }
 .stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .spacer { flex: 1; }
@@ -272,7 +276,7 @@ dialog::backdrop { background: rgba(11, 36, 71, .55); }
   .pads { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  .cols, .cols.wide-left, .game-cols { grid-template-columns: minmax(0, 1fr); }
+  .cols, .cols.wide-left, .cols.lineup-cols, .cols.roster-cols, .game-cols { grid-template-columns: minmax(0, 1fr); }
   .pads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .team-name { font-size: 18px; max-width: 24vw; padding: 0 10px; }
   .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -292,7 +296,7 @@ dialog::backdrop { background: rgba(11, 36, 71, .55); }
   .divider { height: 36px; }
   .tabs { gap: 6px; }
   .main { padding: 12px; }
-  .slots, .grid2 { grid-template-columns: minmax(0, 1fr); }
+  .slots, .grid2, .grid2.name-fields, .grid2.moment-fields { grid-template-columns: minmax(0, 1fr); }
   .dock { flex-wrap: wrap; gap: 8px; min-height: 0; padding: 10px 12px; }
   .dock-info { flex-basis: 100%; }
   .vol { display: none; }
